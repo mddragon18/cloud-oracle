@@ -1,0 +1,3 @@
+timestamp,instance_id,instance_type,requests_per_min,avg_latency_ms,p95_latency_ms,cpu_pct,mem_pct,net_in_kb,net_out_kb,disk_used_gb,workload_pattern
+2026-10-25T10:00:00Z,i-01,t3.micro,512,41.2,88.0,34.5,52.1,820,6400,3.1,steady
+2026-10-25T10:01:00Z,i-01,t3.micro,498,39.8,85.4,33.9,52.3,801,6230,3.1,steady

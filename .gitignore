@@ -1,0 +1,26 @@
+# secrets — never commit AWS keys
+.env
+.env.*
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# local metrics output / generated data (real data lives in S3, not here)
+workload/data/
+*.csv
+!contracts/*.csv
+!data/*.sample.csv
+data/*.out.json
+data/plans/
+
+# model artifacts (real ones live in S3)
+*.h5
+*.keras
+*.pkl
+
+# local aws state
+.terraform/
+*.tfstate

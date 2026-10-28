@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-10-25T10:15:00Z",
+  "model": "lstm",
+  "horizon_minutes": 1440,
+  "step_minutes": 15,
+  "accuracy": {"mape_pct": 8.4, "rmse": 42.1},
+  "series": [
+    {"timestamp": "2026-10-25T10:30:00Z", "requests_per_min": 640, "cpu_pct": 41.0, "mem_pct": 55.0, "lower": 590, "upper": 700}
+  ],
+  "cpu_threshold_pct": 70,
+  "exhaustion_at": "2026-10-25T18:45:00Z"
+}

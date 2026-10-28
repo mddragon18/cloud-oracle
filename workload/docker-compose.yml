@@ -1,0 +1,59 @@
+# Local complete-system fallback: app x 3 replicas behind nginx.
+# Horizontal scaling = replicas; vertical scaling = --cpus/--memory limits below.
+# Usage: docker compose up -d --build   (or `make up` at the repo root)
+services:
+  app1:
+    build: .
+    environment: &app-env
+      INSTANCE_ID: i-01-app
+      INSTANCE_TYPE: docker
+      WORKLOAD_PATTERN: steady
+    volumes:
+      - data1:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+
+  app2:
+    build: .
+    environment:
+      <<: *app-env
+      INSTANCE_ID: i-02-app
+    volumes:
+      - data2:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+
+  app3:
+    build: .
+    environment:
+      <<: *app-env
+      INSTANCE_ID: i-03-app
+    volumes:
+      - data3:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8090:80"   # 8080 is taken by another local app; nginx serves at :8090
+    depends_on:
+      - app1
+      - app2
+      - app3
+
+volumes:
+  data1:
+  data2:
+  data3:

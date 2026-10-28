@@ -1,0 +1,6 @@
+# Module 2 dev stack (Colab uses its own; keep in sync with notebooks)
+numpy
+statsmodels==0.14.*
+pandas
+# prophet  # Phase III
+# tensorflow  # LSTM training in Colab, not locally

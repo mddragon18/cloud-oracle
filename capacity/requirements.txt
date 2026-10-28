@@ -1,0 +1,3 @@
+# Module 3 dev stack — stdlib-only for the stub; add when M/M/c needs scipy
+# scipy
+# requests  # Price List API fetch, Phase II
