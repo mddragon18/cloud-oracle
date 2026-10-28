@@ -1,5 +1,6 @@
 COMPOSE := docker compose -f workload/docker-compose.yml
 PY ?= python3
+LOCUST ?= workload/.venv/bin/locust
 
 .PHONY: up down load test
 
@@ -10,7 +11,7 @@ down:               # tear everything local down
 	$(COMPOSE) down
 
 load:               # PATTERN=steady|cycle|spike|growth  CYCLE_S=600
-	cd workload/locust && PATTERN=$${PATTERN:-steady} locust -f locustfile.py -H http://localhost:8090 --headless -t 2m
+	PATTERN=$${PATTERN:-steady} $(LOCUST) -f workload/locust/locustfile.py -H http://localhost:8090 --headless -t 2m
 
 test:
 	$(PY) forecasting/tests/test_forecast.py

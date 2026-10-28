@@ -13,16 +13,17 @@ import math
 import os
 import time
 
-from locust import Shape, User, constant, task
+from locust import HttpUser, LoadTestShape, constant, task
 
 PATTERN = os.environ.get("PATTERN", "steady")
 BASE_USERS = int(os.environ.get("BASE_USERS", "25"))
 PEAK_USERS = int(os.environ.get("PEAK_USERS", "250"))  # ≈ steady 500 rpm
 CYCLE_S = int(os.environ.get("CYCLE_S", "600"))
 START_T = time.time()
+RUN_S = int(os.environ.get("RUN_S", "0"))  # seconds before the shape stops; 0 = never
 
 
-class WorkloadUser(User):
+class WorkloadUser(HttpUser):
     wait_time = constant(1)
 
     @task(5)
@@ -38,28 +39,29 @@ class WorkloadUser(User):
         self.client.get("/download?kb=4096")
 
 
-class PatternShape(Shape):
-    users = 0
+class PatternShape(LoadTestShape):
+    _prev_users = 0
 
-    def shape(self):
-        while True:
-            t = time.time() - START_T
-            if PATTERN == "steady":
-                users, spawn = PEAK_USERS, PEAK_USERS
-            elif PATTERN == "cycle":
-                # sine wave between BASE and PEAK over one CYCLE_S day-cycle
-                phase = 2 * math.pi * (t % CYCLE_S) / CYCLE_S
-                users = int(BASE_USERS + (PEAK_USERS - BASE_USERS) * (0.5 + 0.5 * math.sin(phase)))
-                spawn = max(1, users - self.users)
-            elif PATTERN == "spike":
-                # 10x spike: BASE for 60 s, jump to PEAK for 120 s, back to BASE
-                users = PEAK_USERS if 60 <= t % 300 <= 180 else BASE_USERS
-                spawn = PEAK_USERS
-            elif PATTERN == "growth":
-                # steady growth: +BASE_USERS every 30 s, capped at PEAK
-                users = min(PEAK_USERS, BASE_USERS + BASE_USERS * int(t // 30))
-                spawn = max(1, users - self.users)
-            else:
-                raise SystemExit(f"unknown PATTERN {PATTERN!r} (steady|cycle|spike|growth)")
-            self.users = users
-            yield users, spawn
+    def tick(self):
+        prev = self._prev_users
+        t = time.time() - START_T
+        if RUN_S and t > RUN_S:
+            return None  # stop the run and print results
+        if PATTERN == "steady":
+            return PEAK_USERS, PEAK_USERS
+        if PATTERN == "cycle":
+            # sine wave between BASE and PEAK over one CYCLE_S day-cycle
+            phase = 2 * math.pi * (t % CYCLE_S) / CYCLE_S
+            users = int(BASE_USERS + (PEAK_USERS - BASE_USERS) * (0.5 + 0.5 * math.sin(phase)))
+            self._prev_users = users
+            return users, max(1, abs(users - prev))
+        if PATTERN == "spike":
+            # 10x spike: BASE for 60 s, jump to PEAK for 120 s, back to BASE
+            users = PEAK_USERS if 60 <= t % 300 <= 180 else BASE_USERS
+            return users, PEAK_USERS
+        if PATTERN == "growth":
+            # steady growth: +BASE_USERS every 30 s, capped at PEAK
+            users = min(PEAK_USERS, BASE_USERS + BASE_USERS * int(t // 30))
+            self._prev_users = users
+            return users, max(1, users - prev)
+        raise SystemExit(f"unknown PATTERN {PATTERN!r} (steady|cycle|spike|growth)")
