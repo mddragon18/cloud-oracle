@@ -3,7 +3,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+_HERE = Path(__file__).resolve()
+# repo checkout: <repo>/service/oracle_service; Lambda image: /var/task/oracle_service with contracts/ beside it
+REPO = _HERE.parents[1] if (_HERE.parents[1] / "contracts").is_dir() else _HERE.parents[2]
 
 
 def _path(value: str) -> Path:

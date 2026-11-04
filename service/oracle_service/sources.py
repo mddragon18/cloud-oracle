@@ -11,6 +11,10 @@ NUMERIC = ("requests_per_min", "avg_latency_ms", "p95_latency_ms", "cpu_pct",
 SAMPLE_C1 = REPO / "contracts" / "C1-metrics.sample.csv"
 
 
+class NoMetricsError(ValueError):
+    """Not enough metric rows to forecast (empty bucket, empty dir, too-short window)."""
+
+
 def parse_ts(ts: str) -> datetime:
     return datetime.fromisoformat(ts)  # 3.11+ parses the trailing Z
 
@@ -32,7 +36,7 @@ def finish(rows: list[dict], since_hours: float) -> list[dict]:
         cutoff = parse_ts(rows[-1]["timestamp"]) - timedelta(hours=since_hours)
         rows = [r for r in rows if parse_ts(r["timestamp"]) >= cutoff]
     if len(rows) < 2:
-        raise ValueError(f"need at least 2 C1 rows, got {len(rows)}")
+        raise NoMetricsError(f"need at least 2 C1 rows, got {len(rows)}")
     return rows
 
 
@@ -48,7 +52,7 @@ class LocalSource:
     def get_rows(self, since_hours: float) -> list[dict]:
         files = sorted(self.directory.glob("*.csv"))
         if not files:
-            raise ValueError(f"no CSV files in {self.directory} (run service/scripts/pull_local_metrics.sh)")
+            raise NoMetricsError(f"no CSV files in {self.directory} (run service/scripts/pull_local_metrics.sh)")
         return finish([r for f in files for r in parse_csv(f.read_text())], since_hours)
 
 
@@ -75,6 +79,8 @@ class S3Source:
                 if len(parts) == 3 and parts[2].endswith(".csv"):
                     # timestamped names sort chronologically
                     newest[parts[1]] = max(newest.get(parts[1], ""), obj["Key"])
+        if not newest:
+            raise NoMetricsError(f"no metrics/<instance>/*.csv objects in s3://{self.bucket}")
         rows = []
         for key in newest.values():
             body = self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read().decode()

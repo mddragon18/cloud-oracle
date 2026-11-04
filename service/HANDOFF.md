@@ -292,11 +292,11 @@ Before starting: run `aws sts get-caller-identity --profile oracle-m4` and do a 
 
 `service/deploy/up.sh` (idempotent: describe-then-create-or-update), in this order:
 1. **ECR** repo `oracle-service` (scan on push, lifecycle policy: keep last 2 images).
-2. **Build & push** `Dockerfile.lambda` (`--platform linux/amd64`, `--provenance=false` so Lambda accepts the manifest). Image copies `service/oracle_service`, `forecasting/`, `capacity/`, `contracts/`.
+2. **Build & push** `Dockerfile.lambda` (`--platform linux/arm64`, native on the Apple Silicon dev Mac, with Lambda `--architectures arm64`; `--provenance=false` so Lambda accepts the manifest; `pip --only-binary=:all:` because the AL2 base image has no compiler). Image copies `service/oracle_service`, `forecasting/`, `capacity/`, `contracts/`.
 3. **DynamoDB** table `oracle-results` (PAY_PER_REQUEST, PK `kind`, SK `generated_at`, TTL on `ttl`).
 4. **SNS** topic `oracle-alerts`; subscribe emails from `ALERT_EMAILS` env (each person must click the confirmation email).
 5. **IAM role** `oracle-lambda-role`: `AWSLambdaBasicExecutionRole` + inline least-privilege policy: `s3:ListBucket`/`s3:GetObject` on the metrics bucket, `dynamodb:PutItem/Query/GetItem` on `oracle-results`, `sns:Publish` on `oracle-alerts`.
-6. **Lambda** `oracle-api` (image, `CMD` → `oracle_service.lambda_handlers.api_handler`, 1024 MB, 30 s timeout) and `oracle-pipeline` (same image, image-config command override → `pipeline_handler`, 1024 MB, 120 s timeout). Env vars from §6 with `ORACLE_STORE=dynamo`, `ORACLE_SOURCE=s3`. Reserved concurrency 2 each (caps runaway cost).
+6. **Lambda** `oracle-api` (image, architecture **arm64**, `CMD` → `oracle_service.lambda_handlers.api_handler`, 1024 MB, 30 s timeout) and `oracle-pipeline` (same image, image-config command override → `pipeline_handler`, 1024 MB, 120 s timeout). Env vars from §6 with `ORACLE_STORE=dynamo`, `ORACLE_SOURCE=s3`. Reserved concurrency 2 each (caps runaway cost) — **not possible on account 149236595048** (concurrency limit 10, AWS keeps 10 unreserved); up.sh warns and API throttling is the guard until the limit is raised.
 7. **CloudWatch Logs** retention 7 days on both log groups.
 8. **API Gateway HTTP API** `oracle-api` with a `$default` route → `oracle-api` Lambda (`aws apigatewayv2 create-api --protocol-type HTTP --target <arn>`), `lambda add-permission` for apigateway, stage throttling **rate 5 rps, burst 10**. Print the URL.
 9. **EventBridge Scheduler** schedule `oracle-pipeline-15min` (`rate(15 minutes)`) with role `oracle-scheduler-role` allowed `lambda:InvokeFunction` on `oracle-pipeline`. Create it **DISABLED** by default; `make -C service schedule-on` / `schedule-off` toggle it. Turn it on only during integration windows and the final demo week.
@@ -425,7 +425,7 @@ When the human corrects you, add a line under LESSONS so the next session doesn'
 
 - **Docker needs sudo on Omarchy** until `omarchy setup security sudoless docker` + reboot (from Member 1).
 - **Locust** is installed in `workload/.venv`; `make load PATTERN=spike RUN_S=300` stops after 300 s.
-- **Lambda "image manifest not supported"** → rebuild with `--provenance=false` and `--platform linux/amd64`.
+- **Lambda "image manifest not supported"** → rebuild with `--provenance=false` and `--platform linux/arm64` (must match the function's `arm64` architecture).
 - **Lambda import errors** for `forecasting`/`capacity` → they must be copied to `${LAMBDA_TASK_ROOT}` and importable as top-level packages (both have `__init__.py`).
 - **DynamoDB float errors** → you stored numbers instead of the JSON string `body`; store JSON text.
 - **SNS emails not arriving** → subscription still "PendingConfirmation"; check the inbox/spam.

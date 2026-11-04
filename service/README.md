@@ -53,6 +53,22 @@ A C2/C3 that fails `schemas.py` validation returns 502; no metrics returns 503.
 `ALERT_WINDOW_MIN` (60) · `LOOKBACK_HOURS` (168, measured back from the newest metric row) ·
 `AGGREGATE_MODE` per_minute_total|raw · `AWS_REGION` (ap-south-1) · `DASHBOARD_URL`. See `oracle_service/config.py`.
 
-## Deploy / teardown
+## Deploy / teardown (AWS, `ap-south-1`, account 149236595048)
 
-Not built yet (W4): `make -C service deploy` / `make -C service down` via `service/deploy/*.sh`.
+Needs `aws configure --profile oracle-m4` (done by the human) and Docker. The Lambda image is built
+natively for **arm64** (Apple Silicon) and both functions run on arm64. Names live in `deploy/config.sh`.
+
+```bash
+make -C service build                                  # local image only, no AWS
+ALERT_EMAILS="a@x.com,b@y.com" make -C service deploy  # deploy/up.sh: idempotent create/update
+make -C service smoke                                  # deploy/smoke.sh: every endpoint + what-if 500/5000
+EVENT='{"source": "sample"}' make -C service invoke    # pipeline once on the contract sample
+EVENT='{"force_alert": true}' make -C service invoke   # one test alert email
+make -C service schedule-on   # / schedule-off — 15-min schedule, OFF except integration/demo windows
+make -C service down          # deploy/down.sh; KEEP=--keep-data keeps the table + SNS topic
+```
+
+`up.sh` creates: ECR `oracle-service` (keeps 2 images), DynamoDB `oracle-results` (on-demand, TTL 30 d),
+SNS `oracle-alerts`, IAM `oracle-lambda-role` + `oracle-scheduler-role`, Lambda `oracle-api` (30 s) and
+`oracle-pipeline` (120 s), log groups (7-day retention), HTTP API `oracle-api` (5 rps / burst 10), and
+schedule `oracle-pipeline-15min` (created **DISABLED**). The metrics bucket is Member 1's and is only read.
