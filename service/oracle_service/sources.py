@@ -12,7 +12,7 @@ SAMPLE_C1 = REPO / "contracts" / "C1-metrics.sample.csv"
 
 
 def parse_ts(ts: str) -> datetime:
-    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    return datetime.fromisoformat(ts)  # 3.11+ parses the trailing Z
 
 
 def parse_csv(text: str) -> list[dict]:

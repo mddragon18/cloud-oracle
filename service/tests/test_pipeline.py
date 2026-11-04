@@ -55,6 +55,7 @@ def test_force_alert_handler(env):
 
 def test_null_accuracy_stores_and_serves(env):
     import json
+
     from service.oracle_service.config import REPO
     from service.oracle_service.store import LocalStore
     c2 = json.loads((REPO / "contracts/C2-forecast.sample.json").read_text())
@@ -62,3 +63,8 @@ def test_null_accuracy_stores_and_serves(env):
     LocalStore(env).put("forecast", c2)
     r = c.get("/forecast/latest")
     assert r.status_code == 200 and r.json()["accuracy"]["mape_pct"] is None
+
+
+def test_stale_data_warns(caplog):
+    s = pipeline.run_once()  # sample C1 is from Oct 2026
+    assert s["data_age_minutes"] > 30 and "stale_metrics" in caplog.text

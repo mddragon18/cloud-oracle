@@ -1,5 +1,5 @@
 """Cross-module checks that document other modules' bugs (not fixed here)."""
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -7,7 +7,7 @@ from service.oracle_service import engine
 
 
 def rows_two_instances(gb_per_day=1.0, minutes=60):
-    t0 = datetime(2026, 10, 25, 10, tzinfo=timezone.utc)
+    t0 = datetime(2026, 10, 25, 10, tzinfo=UTC)
     out = []
     for m in range(minutes):
         for inst in ("i-1", "i-2"):

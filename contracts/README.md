@@ -48,4 +48,5 @@ samples are **placeholders** — Module 3 fills real ones from the Price List ca
 | GET | `/plan/latest` | latest C3 |
 | POST | `/plan` `{"expected_rpm": 5000}` | fresh C3 for that what-if load |
 | GET | `/history?days=7` | past plans, for the dashboard |
+| GET | `/metrics/recent?hours=24` | `{"rows": [...]}` — C1 rows aggregated per minute, for forecast-vs-actual (additive, no format change) |
 | GET | `/health` | `{"status": "ok"}` |
