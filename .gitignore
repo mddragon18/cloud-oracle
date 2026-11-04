@@ -24,3 +24,9 @@ data/plans/
 # local aws state
 .terraform/
 *.tfstate
+
+# Module 4 LocalStore output
+data/forecast/
+data/plan/
+data/alert/
+data/local-metrics/
