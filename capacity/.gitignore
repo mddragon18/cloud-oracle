@@ -1,0 +1,9 @@
+# Capacity module — ignore build/test artifacts
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.venv/
+.venv-spike/
+demo_plan_*.json

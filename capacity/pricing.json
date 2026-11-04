@@ -1,0 +1,25 @@
+{
+  "region_code": "ap-south-1",
+  "region_name": "Asia Pacific (Mumbai)",
+  "currency": "USD",
+  "retrieval_timestamp": "2026-10-27T10:00:00Z",
+  "source": "AWS Price List API (cached)",
+  "prices": {
+    "t3.micro": 0.0112,
+    "t3.small": 0.0224,
+    "t3.medium": 0.0448,
+    "t3.large": 0.0896,
+    "t3.xlarge": 0.1792,
+    "t4g.micro": 0.0084,
+    "t4g.small": 0.0168,
+    "t4g.medium": 0.0336,
+    "t4g.large": 0.0672,
+    "m6i.large": 0.086,
+    "m6i.xlarge": 0.172,
+    "m6i.2xlarge": 0.344,
+    "c6i.large": 0.085,
+    "c6i.xlarge": 0.17,
+    "c6i.2xlarge": 0.34
+  },
+  "notes": "Placeholder prices for local development and testing. Not verified against live AWS Price List API. Replace with actual retrieved prices via scripts/fetch_prices.py before production use."
+}
