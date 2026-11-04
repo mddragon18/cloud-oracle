@@ -50,7 +50,7 @@ def countdown(exhaustion_at: str | None, threshold: float, now: datetime) -> tup
 
 def option_lines(o: dict) -> list[str]:
     return [f"**{o['instances']} × {o['instance_type']}**",
-            f"${o['usd_per_hour']:.3f}/h · **${o['usd_per_day']:.2f}/day**",
+            f"\\${o['usd_per_hour']:.3f}/h · **\\${o['usd_per_day']:.2f}/day**",  # \\$: Streamlit treats $..$ as LaTeX
             f"expected latency {o['expected_latency_ms']:g} ms",
             "single point of failure: " + ("**yes**" if o["single_point_of_failure"] else "no")]
 
@@ -59,8 +59,8 @@ def delta_text(c3: dict) -> str:
     cur = c3["current"]["usd_per_hour"] * 24
     rec = next(o for o in c3["options"] if o["strategy"] == c3["recommendation"])
     diff = rec["usd_per_day"] - cur
-    return (f"Recommended {rec['strategy'].replace('_', '-')} costs ${rec['usd_per_day']:.2f}/day, "
-            f"{'+' if diff >= 0 else '−'}${abs(diff):.2f}/day vs current ({c3['current']['instances']} × "
+    return (f"Recommended {rec['strategy'].replace('_', '-')} costs \\${rec['usd_per_day']:.2f}/day, "
+            f"{'+' if diff >= 0 else '−'}\\${abs(diff):.2f}/day vs current ({c3['current']['instances']} × "
             f"{c3['current']['instance_type']}).")
 
 
@@ -161,7 +161,7 @@ def main():
     cards(c3)
     cur = c3["current"]
     st.caption(f"Bandwidth {c3['bandwidth_mbps']:g} Mbps · storage {c3['storage_gb_30d']:g} GB in 30 days · "
-               f"current {cur['instances']} × {cur['instance_type']} at ${cur['usd_per_hour']:.4f}/h")
+               f"current {cur['instances']} × {cur['instance_type']} at \\${cur['usd_per_hour']:.4f}/h")
 
     # 5. what-if
     st.subheader("What-if")

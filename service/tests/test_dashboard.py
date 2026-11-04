@@ -28,6 +28,7 @@ def test_accuracy_null():
 def test_cards_and_delta():
     assert dash.option_lines(C3["options"][0])[0] == "**6 × t3.micro**"
     assert "vs current" in dash.delta_text(C3)
+    assert dash.option_lines(C3["options"][0])[1].startswith("\\$")  # escaped for Streamlit markdown
     assert dash.age_text("2026-10-25T10:08:00Z", NOW) == "updated 7 min ago"
 
 
