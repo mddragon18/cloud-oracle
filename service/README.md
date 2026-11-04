@@ -68,7 +68,7 @@ make -C service schedule-on   # / schedule-off — 15-min schedule, OFF except i
 make -C service down          # deploy/down.sh; KEEP=--keep-data keeps the table + SNS topic
 ```
 
-`up.sh` creates: ECR `oracle-service` (keeps 2 images), DynamoDB `oracle-results` (on-demand, TTL 30 d),
+`up.sh` creates: ECR `oracle-service` (keeps 1 image), DynamoDB `oracle-results` (on-demand, TTL 30 d),
 SNS `oracle-alerts`, IAM `oracle-lambda-role` + `oracle-scheduler-role`, Lambda `oracle-api` (30 s) and
 `oracle-pipeline` (120 s), log groups (7-day retention), HTTP API `oracle-api` (5 rps / burst 10), and
 schedule `oracle-pipeline-15min` (created **DISABLED**). The metrics bucket is Member 1's and is only read.

@@ -291,7 +291,7 @@ Handle: API unreachable (show message + "switch to offline mode"), empty history
 Before starting: run `aws sts get-caller-identity --profile oracle-m4` and do a dry permission check (§9). If AccessDenied on IAM/ECR/Lambda, stop and list exactly which permissions to ask Member 1 for.
 
 `service/deploy/up.sh` (idempotent: describe-then-create-or-update), in this order:
-1. **ECR** repo `oracle-service` (scan on push, lifecycle policy: keep last 2 images).
+1. **ECR** repo `oracle-service` (scan on push, lifecycle policy: keep last 1 image).
 2. **Build & push** `Dockerfile.lambda` (`--platform linux/arm64`, native on the Apple Silicon dev Mac, with Lambda `--architectures arm64`; `--provenance=false` so Lambda accepts the manifest; `pip --only-binary=:all:` because the AL2 base image has no compiler). Image copies `service/oracle_service`, `forecasting/`, `capacity/`, `contracts/`.
 3. **DynamoDB** table `oracle-results` (PAY_PER_REQUEST, PK `kind`, SK `generated_at`, TTL on `ttl`).
 4. **SNS** topic `oracle-alerts`; subscribe emails from `ALERT_EMAILS` env (each person must click the confirmation email).
@@ -351,7 +351,7 @@ ECR (create/push/lifecycle), Lambda (create/update/invoke/add-permission/concurr
 | IAM roles | `oracle-lambda-role`, `oracle-scheduler-role` |
 | Log groups | `/aws/lambda/oracle-api`, `/aws/lambda/oracle-pipeline` |
 
-**Cost guards (all mandatory):** schedule disabled except during integration/demo; reserved concurrency 2; API throttling 5 rps / burst 10; 7-day log retention; ECR keeps 2 images; DynamoDB TTL 30 days; on-demand billing only. Expected usage (96 pipeline runs/day × ~10 s × 1 GB ≈ 29k GB-s/month) is far below Lambda's free allowance — record the real numbers in `docs/module4.md`.
+**Cost guards (all mandatory):** schedule disabled except during integration/demo; reserved concurrency 2; API throttling 5 rps / burst 10; 7-day log retention; ECR keeps 1 image (500 MB free storage); DynamoDB TTL 30 days; on-demand billing only. Expected usage (96 pipeline runs/day × ~10 s × 1 GB ≈ 29k GB-s/month) is far below Lambda's free allowance — record the real numbers in `docs/module4.md`.
 
 **Kept between sessions:** Lambda functions, API Gateway, DynamoDB, SNS, ECR (all idle-free). **Never left on:** the schedule (unless in an agreed window).
 

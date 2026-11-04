@@ -23,7 +23,7 @@ NEEDS TEAM DECISION:
 - Q3 forecast runtime deps in Lambda (Member 2) — ARIMA needs statsmodels; check image size
 - Q4 pricing.json packaged, no network in plan() (Member 3)
 - Q5 ALERT_EMAILS list
-- Q6 IAM permissions for Member 4 user (Member 1)
+- Q6 IAM permissions for Member 4 user (Member 1) — BLOCKING W4: user m4 has no iam:GetRole/CreateRole (2026-11-04)
 - Post in group: additive endpoint GET /metrics/recent?hours=24
 - Root .gitignore: added data/forecast/, data/plan/, data/alert/, data/local-metrics/ — shared file, flag in PR
 KNOWN BUGS (other modules — not fixed here):
@@ -33,8 +33,10 @@ KNOWN BUGS (other modules — not fixed here):
 - Member 1: root Makefile `load` has no RUN_S (hard-coded -t 2m), handoff assumes RUN_S
 - Member 1: psutil 5.9 has no linux/arm64 wheel; on Apple Silicon build with DOCKER_DEFAULT_PLATFORM=linux/amd64 (and pull nginx:alpine for amd64)
 - Main still has stub forecast(); with raw rows it does not sum across instances (peak 429 for 3x~170 rpm). Expected to change with Member 2's merge.
-AWS STATE (what exists right now):
-- nothing deployed
+AWS STATE (what exists right now, account 149236595048, ap-south-1) — 2026-11-04:
+- ECR repo oracle-service (1 arm64 image, lifecycle keeps 1), DynamoDB oracle-results (empty, on-demand, TTL), SNS oracle-alerts + 1 email subscription (PendingConfirmation)
+- NOT created: IAM roles, Lambdas, log groups, HTTP API, schedule — up.sh stopped at step 5 (iam:CreateRole / iam:GetRole AccessDenied for user m4)
+- Re-run `ALERT_EMAILS=... make -C service deploy` once IAM permissions are granted (up.sh is idempotent)
 LESSONS (mistakes not to repeat):
 - Streamlit markdown treats $..$ as LaTeX: escape dollar signs as \\$.
 - GitHub returned intermittent 5xx on push/PR create (2026-11-04): retry, then check for duplicates.

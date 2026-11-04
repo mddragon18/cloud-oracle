@@ -13,7 +13,7 @@ if ! aws ecr describe-repositories --repository-names "$ECR_REPO" >/dev/null 2>&
     --tags "$TAGS_KV" >/dev/null
 fi
 aws ecr put-lifecycle-policy --repository-name "$ECR_REPO" --lifecycle-policy-text \
-  '{"rules":[{"rulePriority":1,"description":"keep last 2","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":2},"action":{"type":"expire"}}]}' >/dev/null
+  '{"rules":[{"rulePriority":1,"description":"keep last 1","selection":{"tagStatus":"any","countType":"imageCountMoreThan","countNumber":1},"action":{"type":"expire"}}]}' >/dev/null
 
 log "2. build + push image ($ARCH)"
 IMAGE_TAG="$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)"
