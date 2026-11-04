@@ -1,39 +1,50 @@
-# Cloud Cost & Capacity Oracle
+# Cloud Cost & Capacity Oracle — "Predict Before You Scale"
 
-A team project that monitors a real workload, forecasts its next 24 h of load, and
-recommend the cheapest scaling strategy (scale-out vs scale-up) before capacity
+Watches a cloud app's metrics, forecasts the next 24 h of load, and recommends how much
+infrastructure is needed, when, and at what cost (scale-out vs scale-up) before capacity
 runs out. Runs entirely on the AWS Free plan — the bill must stay at zero.
 
-See the work plan PDF (`Cloud Cost & Capacity Oracle — Team Work Plan.pdf`) for the
-full plan. Quick rules:
+Architecture: workload → C1 metrics (S3) → `forecast()` → C2 → `plan()` → C3 → service
+(API + schedule + alerts) → dashboard. Diagram and full plan: `Cloud Cost & Capacity Oracle — Team Work Plan.pdf`.
+Frozen formats: [`contracts/README.md`](contracts/README.md).
 
-- **Contracts are frozen.** `contracts/` holds C1–C3 sample files; changing a format
-  needs team agreement.
-- **Own your folder.** Only touch another module through a PR approved by its owner.
-- **Branches:** `m1-*`, `m2-*`, `m3-*`, `m4-*` → PR into `main`; `main` must always pass tests.
-- **Python 3.11**, each module keeps its own `requirements.txt`.
-- **Secrets:** AWS keys only in local `.env` files and GitHub Actions secrets, never in the repo.
-- **AWS hygiene:** one region (`ap-south-1`), tag everything `project=oracle`,
-  `make down` after every session. Docker Compose is the complete offline fallback demo.
+## Modules
 
-## Layout
+| Folder | Module | Owner | Status |
+|---|---|---|---|
+| `contracts/` | C1–C3 samples + schema notes | Member 4 (everyone reviews) | frozen |
+| `workload/`, `infra/` | 1 — app, collector, Locust, AWS experiment infra | Member 1 | app + collector done; infra Phase III |
+| `forecasting/` | 2 — `load_metrics()`, `forecast()` | Member 2 | stub (linear trend) |
+| `capacity/` | 3 — `baseline()`, `plan()`, `pricing.json` | Member 3 | stub (placeholder prices) |
+| `service/` | 4 — API, pipeline, dashboard, deploy | Member 4 | offline core done; dashboard + AWS next |
 
-| Folder | Module | Owner |
-|---|---|---|
-| `contracts/` | C1–C3 sample files + schema notes | Member 4 (everyone reviews) |
-| `workload/` | 1 — FastAPI app + collector + Locust | Member 1 |
-| `infra/` | 1 — AWS scripts (`make up` / `make down`) | Member 1 |
-| `forecasting/` | 2 — loaders, models, `forecast()` | Member 2 |
-| `capacity/` | 3 — `baseline()`, `plan()`, `pricing.json` | Member 3 |
-| `service/` | 4 — FastAPI + Streamlit dashboard | Member 4 |
-| `data/` | small samples only — real data stays in S3 | — |
-| `docs/` | report, paper, diagrams | — |
-
-## Local demo (no AWS needed)
+## Quick start (local, no AWS)
 
 ```bash
-make up      # Docker Compose: app x 3 behind nginx at http://localhost:8090
-make load    # one Locust pattern (PATTERN=steady|cycle|spike|growth)
-make down    # stop everything
-make test    # run every module's tests against the contract samples
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -r service/requirements.txt -r service/requirements-dev.txt -r forecasting/requirements.txt
+make test                          # every module against the contract samples
+make -C service pipeline-once      # forecast + plan from sample metrics into data/
+make -C service run-api            # API on http://localhost:8000/docs
 ```
+
+Per module:
+
+```bash
+make up && make load PATTERN=spike # Module 1: app x3 behind nginx at :8090, Locust load
+python forecasting/forecast.py     # Module 2: writes data/forecast.out.json
+python capacity/plan.py            # Module 3: writes data/plan.out.json
+make down
+```
+
+Module 4 details: [`service/README.md`](service/README.md).
+
+## Rules
+
+- **Contracts are frozen.** Changing a C1–C3 format needs team agreement.
+- **Own your folder.** Touch another module only through a PR its owner approves.
+- **Branches:** `m1-*` … `m4-*` → PR into `main`; CI runs `make test` + `pytest service/tests`; `main` stays green.
+- **Python 3.11**, each module keeps its own `requirements.txt`.
+- **Secrets:** AWS keys only in local `.env` / AWS CLI profiles / GitHub Actions secrets — never in the repo.
+- **AWS hygiene:** region `ap-south-1` only, tag everything `project=oracle`, tear down after every
+  session (`make down`, `make -C service down`). Docker Compose is the complete offline fallback demo.
