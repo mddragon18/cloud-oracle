@@ -20,3 +20,11 @@ predict them; ARIMA only widens its uncertainty band there.
 | wikipedia | same-time-yesterday | 32.1 | 32.7 | 4.68 |
 | azure | arima | 9.2 | 10.9 | 1.32 |
 | azure | same-time-yesterday | 5.9 | 7.3 | 0.85 |
+
+## Real AWS run, 2026-11-04 (too short for a held-out day: small-sample check only)
+
+Data: `aws s3 sync s3://<bucket>/metrics/ <dir>`, then `python -m forecasting.loaders aws-run <dir>`.
+
+Unbroken stretch 2026-11-04T13:23:00Z .. 2026-11-04T13:37:00Z (15 min). `forecast()` on the first 10 min gives model `naive`, level 2138 req/min. Against the last 5 min (actual 2072-2278): MAE 49.6, MAPE 2.26%.
+
+Whole run (20 rows, gaps included) gives model `naive`, 24 h peak 1837 req/min (observed per-minute max 2390).

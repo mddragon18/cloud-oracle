@@ -82,6 +82,19 @@ def azure_functions(trace_dir, trigger="http", function=None, start="2026-10-01T
     return c1_from_rpm(_scale(pd.Series(values, index=idx), peak_rpm), "azure-functions")
 
 
+def aws_run(sync_dir):
+    """C1 DataFrame from an `aws s3 sync` of the metrics/ prefix.
+
+    The collector re-uploads its whole growing csv every 5 min, so files overlap:
+    concatenate, drop duplicate rows, sort.
+    """
+    files = glob.glob(os.path.join(sync_dir, "**", "*.csv"), recursive=True)
+    if not files:
+        raise FileNotFoundError(f"no csv files under {sync_dir}")
+    df = pd.concat(pd.read_csv(f) for f in files).drop_duplicates()
+    return df.sort_values(["timestamp", "instance_id"]).reset_index(drop=True)
+
+
 if __name__ == "__main__":
     import argparse
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -92,8 +105,15 @@ if __name__ == "__main__":
     w.add_argument("--end", default="20261014")
     a = sub.add_parser("azure")
     a.add_argument("trace_dir")
+    s3 = sub.add_parser("aws-run", help="dir from: aws s3 sync s3://<bucket>/metrics/ <dir>")
+    s3.add_argument("sync_dir")
     args = p.parse_args()
-    df = wikipedia(start=args.start, end=args.end) if args.src == "wikipedia" else azure_functions(args.trace_dir)
+    if args.src == "wikipedia":
+        df = wikipedia(start=args.start, end=args.end)
+    elif args.src == "azure":
+        df = azure_functions(args.trace_dir)
+    else:
+        df = aws_run(args.sync_dir)
     out = os.path.join(here, "data", f"{args.src}.csv")
     df.to_csv(out, index=False)
     print(f"wrote {out} ({len(df)} rows)")
