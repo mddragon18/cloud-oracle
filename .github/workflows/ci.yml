@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            service/requirements*.txt
+            forecasting/requirements.txt
+            capacity/requirements.txt
+      - run: pip install -r service/requirements.txt -r service/requirements-dev.txt -r forecasting/requirements.txt -r capacity/requirements.txt
+      - run: make test PY=python
+      - run: pytest service/tests -q
+      - name: ruff (non-blocking)
+        continue-on-error: true
+        run: ruff check service
