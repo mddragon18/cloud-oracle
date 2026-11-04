@@ -54,5 +54,29 @@ def test_page_renders_offline():
 def test_confidence_texts_and_offline_quality():
     assert dash.low_confidence_text(20) == "Low confidence: only 20 rows of history, simple model; numbers may be unrealistic"
     assert dash.data_age_text(60) == "newest metrics 1 h 0 min old" and dash.data_age_text(None) == "data age unknown"
-    _, src, q = Client(None).forecast()
-    assert src == "sample" and q["confidence"] == "low" and q["data_age_minutes"] > 30
+    _, src, q = Client(None).forecast()  # demo shift makes the sample current
+    assert src == "sample" and q["confidence"] == "normal" and q["data_age_minutes"] <= 1
+
+
+def test_demo_shift_countdown_reads_normally():
+    now = datetime(2026, 12, 15, 9, 0, tzinfo=UTC)
+    c = Client(None, now=now)
+    c2, src, q = c.forecast()
+    c3, _ = c.plan()
+    rows = c.recent()
+    # sample: newest row 10:15, exhaustion 18:45 -> 8 h 30 min ahead of the shifted "now"
+    assert c2["series"][0]["timestamp"] == "2026-12-15T09:15:00Z" and c2["exhaustion_at"] == "2026-12-15T17:30:00Z"
+    assert c3["exhaustion_at"] == c2["exhaustion_at"] and rows[-1]["timestamp"] == "2026-12-15T08:46:00Z"
+    assert dash.countdown(c2["exhaustion_at"], 70, now) == ("CPU reaches 70% in 8 h 30 min (17:30 UTC)", "ok")
+    assert src == "sample" and q == {"confidence": "normal", "data_age_minutes": 0}
+    assert json.loads((REPO / "contracts/C2-forecast.sample.json").read_text())["exhaustion_at"] == "2026-10-25T18:45:00Z"
+
+
+def test_live_mode_not_shifted():
+    from datetime import timedelta
+
+    from client import shift_times
+    doc = {"generated_at": "2026-10-25T10:15:00Z", "exhaustion_at": None, "series": [{"timestamp": "2026-10-25T10:30:00Z"}]}
+    assert Client("http://x")._demo(doc) is doc  # live: untouched object
+    assert Client(None)._demo(doc, "live") is doc  # stored local results: untouched
+    assert shift_times(doc, timedelta(hours=1))["exhaustion_at"] is None

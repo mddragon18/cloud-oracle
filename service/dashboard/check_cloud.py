@@ -16,10 +16,10 @@ for mod in ("fastapi", "boto3", "statsmodels", "matplotlib"):
 
 at = AppTest.from_file("service/dashboard/app.py", default_timeout=60).run()
 assert not at.exception, at.exception
-assert not at.error or all("CPU" in e.value for e in at.error), [e.value for e in at.error]  # only the countdown may be red
+assert not at.error, [e.value for e in at.error]  # demo countdown is shifted to the future: nothing red
 assert at.toggle[0].value is True, "should start in offline mode"
 assert any("Demo data: live API not connected yet" in i.value for i in at.info)
-assert any("Low confidence" in w.value for w in at.warning), "low-confidence banner missing (sample data is old)"
+assert not any("Low confidence" in w.value for w in at.warning), "demo data should read as current, no banner"
 md = " ".join(m.value for m in at.markdown)
 sub = " ".join(s.value for s in at.subheader)
 for panel in ("Forecast vs actual", "Options for peak", "What-if", "History (7 days)"):
