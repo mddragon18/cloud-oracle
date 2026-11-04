@@ -55,6 +55,14 @@ PROVISIONAL_CAPACITY_MULTIPLIER = {
 DEFAULT_CURRENT_INSTANCE_TYPE = "t3.micro"
 DEFAULT_CURRENT_INSTANCES = 1
 
+# Measured CPU coefficient from real AWS run (Member 1, 2026-11-04):
+# cluster CPU ≈ 2.7% per 100 rpm (replaces provisional ~7.0)
+MEASURED_CPU_PCT_PER_100_RPM = 2.7
+
+# Memory binding limit for t3.micro (real AWS run):
+# OOM at ~620 rpm per instance — RAM is binding constraint, not CPU
+T3_MICRO_OOM_RPM = 620
+
 # Pricing region settings.
 AWS_REGION_CODE = "ap-south-1"
 AWS_REGION_NAME = "Asia Pacific (Mumbai)"
