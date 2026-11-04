@@ -27,6 +27,20 @@ def test_sample():
     assert result["series"][0]["timestamp"] == "2026-10-25T10:16:00Z"
 
 
+def test_naive_does_not_run_away():
+    """Regression: 20 noisy real-like minutes used to extrapolate to ~85k rpm over 24 h."""
+    from forecasting.synthetic import generate
+    rows = generate("steady", days=1).head(20).to_dict("records")
+    rows[-1]["requests_per_min"] *= 1.5  # one noisy last minute
+    result = forecast(rows)
+    check_c2(result)
+    assert result["model"] == "naive"
+    observed_max = max(r["requests_per_min"] for r in rows)
+    assert all(r["upper"] <= observed_max * 1.5 for r in result["series"]), result["series"][0]
+    assert len({r["requests_per_min"] for r in result["series"]}) == 1  # flat
+    assert result["exhaustion_at"] is None
+
+
 def test_arima_cycle():
     from forecasting.synthetic import generate
     result = forecast(generate("cycle", days=4))  # DataFrame input
@@ -34,15 +48,16 @@ def test_arima_cycle():
     assert result["model"] == "arima"
     assert result["accuracy"]["mape_pct"] < 5, result["accuracy"]
     assert all(r["lower"] <= r["requests_per_min"] <= r["upper"] for r in result["series"])
-    assert result["exhaustion_at"] is None  # cycle peaks ~800 rpm -> ~53% CPU
+    assert result["exhaustion_at"] is None  # cycle peaks ~800 rpm -> ~22% CPU
 
 
 def test_growth_exhaustion():
     from forecasting.synthetic import generate
-    result = forecast(generate("growth", days=7))  # ends ~1000 rpm (~65% CPU), +100 rpm/day
+    # ends ~1000 rpm (~27% CPU at the measured 2.7%/100 rpm), +100 rpm/day -> crosses 28% next day
+    result = forecast(generate("growth", days=7), cpu_threshold_pct=28)
     assert result["exhaustion_at"] is not None
     hit = next(r for r in result["series"] if r["timestamp"] == result["exhaustion_at"])
-    assert hit["cpu_pct"] >= 70
+    assert hit["cpu_pct"] >= 28
 
 
 def test_instances_are_summed():
