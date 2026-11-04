@@ -49,3 +49,10 @@ def test_page_renders_offline():
     at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "dashboard" / "app.py"), default_timeout=30).run()
     assert not at.exception
     assert any("Recommendation" in m.value for m in at.markdown)
+
+
+def test_confidence_texts_and_offline_quality():
+    assert dash.low_confidence_text(20) == "Low confidence: only 20 rows of history, simple model; numbers may be unrealistic"
+    assert dash.data_age_text(60) == "newest metrics 1 h 0 min old" and dash.data_age_text(None) == "data age unknown"
+    _, src, q = Client(None).forecast()
+    assert src == "sample" and q["confidence"] == "low" and q["data_age_minutes"] > 30

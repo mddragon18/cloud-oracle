@@ -13,6 +13,7 @@ from .core import (  # noqa: F401  (re-exported for service/api/app.py and tests
     latest,
     latest_forecast,
     latest_plan,
+    quality,
     recent_metrics,
     whatif_plan,
 )
@@ -22,7 +23,8 @@ log = logging.getLogger(__name__)
 
 
 app = FastAPI(title="oracle-service")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"],
+                   expose_headers=["X-Oracle-Source", "X-Oracle-Confidence", "X-Oracle-Data-Age-Minutes"])
 
 
 @app.exception_handler(ContractError)
@@ -36,17 +38,26 @@ def _no_data(_, exc: ValueError):
     return JSONResponse(status_code=503, content={"detail": str(exc)[:200]})
 
 
+def _headers(response: Response, src: str, c2: dict) -> None:
+    """Metadata outside C2/C3: X-Oracle-Source, X-Oracle-Confidence (low|normal), X-Oracle-Data-Age-Minutes."""
+    q = quality(c2)
+    response.headers["X-Oracle-Source"] = src
+    response.headers["X-Oracle-Confidence"] = q["confidence"]
+    if q["data_age_minutes"] is not None:
+        response.headers["X-Oracle-Data-Age-Minutes"] = str(q["data_age_minutes"])
+
+
 @app.get("/forecast/latest")
 def api_forecast(response: Response):
     doc, src = latest("forecast")
-    response.headers["X-Oracle-Source"] = src
+    _headers(response, src, doc)
     return doc
 
 
 @app.get("/plan/latest")
 def api_plan(response: Response):
     doc, src = latest("plan")
-    response.headers["X-Oracle-Source"] = src
+    _headers(response, src, latest("forecast")[0])  # a plan is as trustworthy as the forecast behind it
     return doc
 
 

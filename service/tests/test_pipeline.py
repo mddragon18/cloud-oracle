@@ -81,3 +81,30 @@ def test_handler_source_override_and_empty_bucket(env, monkeypatch):
         r = pipeline_handler({}, None)
         assert r["ok"] is False and "no metrics/" in r["error"] and not (env / "plan").exists()
         assert pipeline_handler({"source": "sample"}, None)["ok"] is True
+
+
+def _fresh_c2(model="arima", mape=5.0, age_min=5):
+    import json
+    from datetime import UTC, datetime, timedelta
+
+    from service.oracle_service.config import REPO
+    from service.oracle_service.store import iso
+    c2 = json.loads((REPO / "contracts/C2-forecast.sample.json").read_text())
+    now = datetime.now(UTC)
+    c2.update(generated_at=iso(now), model=model, accuracy={"mape_pct": mape, "rmse": 1.0 if mape else None})
+    c2["series"][0]["timestamp"] = iso(now - timedelta(minutes=age_min) + timedelta(minutes=c2["step_minutes"]))
+    return c2
+
+
+def test_confidence_headers(env):
+    from service.oracle_service.store import LocalStore
+    r = c.get("/forecast/latest")  # contract sample is from October -> stale -> low
+    assert r.headers["X-Oracle-Confidence"] == "low" and int(r.headers["X-Oracle-Data-Age-Minutes"]) > 30
+    assert "confidence" not in r.json()  # header only, C2 untouched
+    s = LocalStore(env)
+    s.put("forecast", _fresh_c2())
+    for path in ("/forecast/latest", "/plan/latest"):
+        h = c.get(path).headers
+        assert h["X-Oracle-Confidence"] == "normal" and int(h["X-Oracle-Data-Age-Minutes"]) <= 6, path
+    s.put("forecast", {**_fresh_c2(model="naive", mape=None), "generated_at": "2999-01-01T00:00:00Z"})
+    assert c.get("/plan/latest").headers["X-Oracle-Confidence"] == "low"

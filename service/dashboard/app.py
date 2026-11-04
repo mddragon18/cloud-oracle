@@ -49,6 +49,15 @@ def countdown(exhaustion_at: str | None, threshold: float, now: datetime) -> tup
     return f"CPU reaches {threshold:g}% in {duration(left)} ({when})", level
 
 
+def low_confidence_text(n_rows: int | None) -> str:
+    rows = f"only {n_rows} rows of history" if n_rows is not None else "little history"
+    return f"Low confidence: {rows}, simple model; numbers may be unrealistic"
+
+
+def data_age_text(minutes: int | None) -> str:
+    return "data age unknown" if minutes is None else f"newest metrics {duration(minutes)} old"
+
+
 def option_lines(o: dict) -> list[str]:
     return [f"**{o['instances']} × {o['instance_type']}**",
             f"\\${o['usd_per_hour']:.3f}/h · **\\${o['usd_per_day']:.2f}/day**",  # \\$: Streamlit treats $..$ as LaTeX
@@ -104,17 +113,26 @@ def main():
     now = datetime.now(UTC)
     try:
         with st.spinner("Loading forecast and plan…"):
-            c2, src = get("forecast", base)
+            c2, src, quality = get("forecast", base)
             c3, _ = get("plan", base)
     except ApiError as e:
         st.error(f"{e}. Check the URL or switch to **Offline mode** in the sidebar.")
         st.stop()
 
+    try:
+        actual = pd.DataFrame(get("recent", base, 24))
+        actual_err = None
+    except ApiError as e:
+        actual, actual_err = pd.DataFrame(), e
+
     # 1. status strip
     if offline:
         st.info("🧪 Demo data: live API not connected yet")
+    if quality["confidence"] == "low":
+        st.warning("⚠️ " + low_confidence_text(len(actual) if not actual.empty else None))
     st.caption(("🟡 sample data (nothing stored yet)" if src == "sample" else "🟢 live")
-               + f" · {age_text(c3.get('generated_at'), now)} · {accuracy_text(c2)}")
+               + f" · {age_text(c3.get('generated_at'), now)} · {data_age_text(quality['data_age_minutes'])}"
+               + f" · {accuracy_text(c2)}")
     st.markdown(f"## Recommendation: {c3['recommendation'].replace('_', '-')}")
     st.write(c3.get("reason", ""))
 
@@ -125,11 +143,8 @@ def main():
 
     # 3. forecast vs actual
     st.subheader("Forecast vs actual")
-    try:
-        actual = pd.DataFrame(get("recent", base, 24))
-    except ApiError as e:
-        actual = pd.DataFrame()
-        st.info(f"Actual metrics unavailable: {e}")
+    if actual_err:
+        st.info(f"Actual metrics unavailable: {actual_err}")
     fc = pd.DataFrame(c2["series"])
 
     def chart(col: str, label: str, band: bool, threshold: float | None = None):

@@ -1,10 +1,12 @@
 """Plain dict-returning service functions (no FastAPI) — used by the API routes and the dashboard's offline mode."""
 import json
+from datetime import UTC, datetime, timedelta
 
 from . import config, engine
+from .alerts import STALE_MIN, low_confidence
 from .config import REPO
 from .schemas import validate
-from .sources import get_source
+from .sources import get_source, parse_ts
 from .store import get_store
 
 SAMPLES = {"forecast": REPO / "contracts" / "C2-forecast.sample.json",
@@ -17,6 +19,20 @@ def latest(kind: str) -> tuple[dict, str]:
     if doc is None:
         return json.loads(SAMPLES[kind].read_text()), "sample"
     return validate(kind, doc), "live"
+
+
+def quality(c2: dict, now: datetime | None = None) -> dict:
+    """Confidence for a C2 (not part of the contract; served as headers). Low = naive model, null accuracy,
+    or newest metric row older than 30 min. The newest row is series[0] minus one step (forecast starts one step later)."""
+    now = now or datetime.now(UTC)
+    age = None
+    try:
+        last_row = parse_ts(c2["series"][0]["timestamp"]) - timedelta(minutes=c2["step_minutes"])
+        age = max(0, round((now - last_row).total_seconds() / 60))
+    except (KeyError, IndexError, TypeError, ValueError):
+        pass
+    low = low_confidence(c2) or age is None or age > STALE_MIN
+    return {"confidence": "low" if low else "normal", "data_age_minutes": age}
 
 
 def latest_forecast() -> dict:
