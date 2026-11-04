@@ -18,3 +18,5 @@ predict them; ARIMA only widens its uncertainty band there.
 | synthetic-growth | same-time-yesterday | 100.4 | 101.7 | 10.56 |
 | wikipedia | arima | 22.7 | 28.0 | 3.28 |
 | wikipedia | same-time-yesterday | 32.1 | 32.7 | 4.68 |
+| azure | arima | 9.2 | 10.9 | 1.32 |
+| azure | same-time-yesterday | 5.9 | 7.3 | 0.85 |

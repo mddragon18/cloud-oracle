@@ -57,18 +57,27 @@ def azure_functions(trace_dir, trigger="http", function=None, start="2026-10-01T
     if not files:
         raise FileNotFoundError(f"no invocations_per_function_md.anon.d*.csv in {trace_dir}")
     minute_cols = [str(m) for m in range(1, 1441)]
-    days = []
-    for f in files:
-        d = pd.read_csv(f)
-        d = d[d["Trigger"] == trigger] if function is None else d
-        days.append(d.set_index("HashFunction")[minute_cols])
     if function is None:
-        common = set(days[0].index).intersection(*(set(d.index) for d in days[1:]))
+        # pass 1, id columns only: `trigger` functions present on every day (each day file is ~135 MB)
+        common = None
+        for f in files:
+            ids = pd.read_csv(f, usecols=["HashFunction", "Trigger"])
+            found = set(ids.loc[ids["Trigger"] == trigger, "HashFunction"])
+            common = found if common is None else common & found
         if not common:
             raise ValueError(f"no {trigger!r} function present in all {len(files)} day files")
-        function = days[0].loc[list(common)].sum(axis=1).idxmax()
-    # duplicate hashes across owners are possible; sum them as one function
-    values = pd.concat([d.loc[[function]].sum(axis=0) for d in days]).to_numpy(dtype=float)
+        day1 = pd.read_csv(files[0])
+        day1 = day1[day1["HashFunction"].isin(common)]
+        function = day1.groupby("HashFunction")[minute_cols].sum().sum(axis=1).idxmax()
+    # pass 2: keep only that function's rows, a chunk at a time.
+    # Duplicate hashes across owners are possible; sum them as one function.
+    per_day = []
+    for f in files:
+        rows = pd.concat(c[c["HashFunction"] == function] for c in pd.read_csv(f, chunksize=10000))
+        if rows.empty:
+            raise ValueError(f"function {function!r} missing from {os.path.basename(f)}")
+        per_day.append(rows[minute_cols].sum(axis=0))
+    values = pd.concat(per_day).to_numpy(dtype=float)
     idx = pd.date_range(start, periods=len(values), freq="min")
     return c1_from_rpm(_scale(pd.Series(values, index=idx), peak_rpm), "azure-functions")
 
