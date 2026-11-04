@@ -4,7 +4,7 @@ LOCUST ?= workload/.venv/bin/locust
 
 .PHONY: up down load test
 
-up:                 # full local stack: app x 3 behind nginx at :8080
+up:                 # full local stack: app x 3 behind nginx at :8090
 	$(COMPOSE) up -d --build
 
 down:               # tear everything local down
