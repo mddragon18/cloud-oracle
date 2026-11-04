@@ -57,7 +57,11 @@ def main(step_minutes=15):
     fig.savefig(os.path.join(results_dir, "forecast_vs_actual.png"), dpi=120)
     table = "\n".join(lines) + "\n"
     with open(os.path.join(results_dir, "accuracy.md"), "w") as f:
-        f.write("# Forecast accuracy (held-out last day, 15-min steps)\n\n" + table)
+        f.write("# Forecast accuracy (held-out last day, 15-min steps)\n\n"
+                "Reproduce: `python -m forecasting.loaders wikipedia` (rows for real traces need their\n"
+                "csv in data/, which is gitignored), then `python -m forecasting.evaluate`.\n\n"
+                "Known limitation: the spike pattern's spikes land at random times, so no model can\n"
+                "predict them; ARIMA only widens its uncertainty band there.\n\n" + table)
     print(table)
 
 

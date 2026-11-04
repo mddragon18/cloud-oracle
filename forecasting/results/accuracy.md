@@ -1,5 +1,11 @@
 # Forecast accuracy (held-out last day, 15-min steps)
 
+Reproduce: `python -m forecasting.loaders wikipedia` (rows for real traces need their
+csv in data/, which is gitignored), then `python -m forecasting.evaluate`.
+
+Known limitation: the spike pattern's spikes land at random times, so no model can
+predict them; ARIMA only widens its uncertainty band there.
+
 | dataset | model | MAE (req/min) | RMSE | MAPE % |
 |---|---|---|---|---|
 | synthetic-steady | arima | 5.3 | 6.4 | 1.06 |
