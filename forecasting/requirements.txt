@@ -4,3 +4,4 @@ statsmodels==0.14.*
 pandas
 # prophet  # Phase III
 # tensorflow  # LSTM training in Colab, not locally
+matplotlib

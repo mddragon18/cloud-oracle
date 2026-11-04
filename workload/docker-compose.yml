@@ -8,6 +8,7 @@ services:
       INSTANCE_ID: i-01-app
       INSTANCE_TYPE: docker
       WORKLOAD_PATTERN: steady
+      S3_BUCKET: ${S3_BUCKET:-}      # set on AWS (aws-up.sh) -> collector uploads C1 to S3
     volumes:
       - data1:/data
     deploy:

@@ -91,8 +91,8 @@ class Collector(threading.Thread):
             round(p95_ms, 1),
             round(psutil.cpu_percent(interval=None), 1),
             round(psutil.virtual_memory().percent, 1),
-            round((net.bytes_in - self.last_net.bytes_in) / 1024),
-            round((net.bytes_out - self.last_net.bytes_out) / 1024),
+            round((net.bytes_recv - self.last_net.bytes_recv) / 1024),
+            round((net.bytes_sent - self.last_net.bytes_sent) / 1024),
             round(psutil.disk_usage("/").used / 2**30, 1),
             PATTERN,
         ]
