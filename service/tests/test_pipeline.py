@@ -51,3 +51,14 @@ def test_failure_stores_nothing(env, monkeypatch):
 
 def test_force_alert_handler(env):
     assert pipeline_handler({"force_alert": True}, None)["alert"] == "logged"
+
+
+def test_null_accuracy_stores_and_serves(env):
+    import json
+    from service.oracle_service.config import REPO
+    from service.oracle_service.store import LocalStore
+    c2 = json.loads((REPO / "contracts/C2-forecast.sample.json").read_text())
+    c2["accuracy"] = {"mape_pct": None, "rmse": None}
+    LocalStore(env).put("forecast", c2)
+    r = c.get("/forecast/latest")
+    assert r.status_code == 200 and r.json()["accuracy"]["mape_pct"] is None

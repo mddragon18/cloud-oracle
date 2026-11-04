@@ -22,7 +22,7 @@ _MEAN = ("avg_latency_ms", "p95_latency_ms", "cpu_pct", "mem_pct", "disk_used_gb
 
 
 def aggregate(rows: list[dict], mode: str = "per_minute_total") -> list[dict]:
-    """C1 per-instance rows -> one app-level row per minute (sum traffic, mean utilisation). §12 Q1."""
+    """C1 per-instance rows -> one row per minute (sum traffic, mean utilisation). Default mode "raw": Modules 2/3 aggregate themselves (Q1); per_minute_total is used by /metrics/recent."""
     if mode == "raw":
         return rows
     if mode != "per_minute_total":
@@ -56,7 +56,7 @@ def run_plan(c2: dict, base: dict) -> dict:
     return validate("plan", _plan(copy.deepcopy(c2), base))
 
 
-def whatif(expected_rpm: int, rows: list[dict], mode: str = "per_minute_total") -> dict:
+def whatif(expected_rpm: int, rows: list[dict], mode: str = "raw") -> dict:
     """Fresh C3 with every forecast point set to expected_rpm. The tweaked C2 stays internal."""
     c2 = copy.deepcopy(run_forecast(aggregate(rows, mode)))
     for s in c2["series"]:

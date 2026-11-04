@@ -40,7 +40,7 @@ def load() -> Config:
         alert_topic_arn=e("ALERT_TOPIC_ARN", ""),
         alert_window_min=int(e("ALERT_WINDOW_MIN", "60")),
         lookback_hours=int(e("LOOKBACK_HOURS", "168")),
-        aggregate_mode=e("AGGREGATE_MODE", "per_minute_total"),
+        aggregate_mode=e("AGGREGATE_MODE", "raw"),
         aws_region=e("AWS_REGION", "ap-south-1"),
         dashboard_url=e("DASHBOARD_URL", ""),
     )

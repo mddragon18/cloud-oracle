@@ -9,8 +9,8 @@ class _M(BaseModel):
 
 
 class Accuracy(_M):
-    mape_pct: float
-    rmse: float
+    mape_pct: float | None  # null until enough history (Member 2)
+    rmse: float | None
 
 
 class SeriesPoint(_M):
@@ -24,7 +24,7 @@ class SeriesPoint(_M):
 
 class C2(_M):
     generated_at: str
-    model: str
+    model: str  # naive | arima | lstm, kept free-form
     horizon_minutes: int
     step_minutes: int
     accuracy: Accuracy

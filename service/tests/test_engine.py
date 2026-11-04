@@ -37,3 +37,15 @@ def test_aggregate_sums_rpm_means_cpu():
          for i, c in (("a", 20.0), ("b", 40.0))]
     (a,) = engine.aggregate(r)
     assert a["requests_per_min"] == 200 and a["cpu_pct"] == 30 and a["instances"] == 2
+
+
+def test_null_accuracy_and_any_model_validate():
+    c2 = json.loads((REPO / "contracts/C2-forecast.sample.json").read_text())
+    c2["accuracy"] = {"mape_pct": None, "rmse": None}
+    c2["model"] = "arima"
+    validate("forecast", c2)
+
+
+def test_default_mode_is_raw():
+    from service.oracle_service import config
+    assert config.load().aggregate_mode == "raw" and engine.aggregate(rows(), "raw") == rows()
