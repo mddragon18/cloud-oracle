@@ -1,4 +1,5 @@
 """API client for the dashboard, with an offline fallback that calls oracle_service directly."""
+import os
 import sys
 from pathlib import Path
 
@@ -31,9 +32,14 @@ class Client:
         return r.json(), r.headers.get("X-Oracle-Source", "live")
 
     def _offline(self, fn, *args):
-        from service.oracle_service import api
+        # Offline = contract sample data only: never S3/DynamoDB, never AWS credentials.
+        os.environ["ORACLE_SOURCE"] = "sample"
+        os.environ["ORACLE_STORE"] = "local"
+        # core is FastAPI-free, so Streamlit Cloud needs no fastapi
+        from service.oracle_service import core
+
         try:
-            return fn(api)(*args)
+            return fn(core)(*args)
         except Exception as e:
             raise ApiError(f"offline mode failed: {str(e)[:200]}") from e
 

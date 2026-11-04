@@ -75,9 +75,13 @@ def main():
     def default_url() -> str:
         if os.environ.get("ORACLE_API_URL"):
             return os.environ["ORACLE_API_URL"]
-        # touching st.secrets without a secrets.toml renders an error box, so check first
-        paths = (Path.cwd() / ".streamlit/secrets.toml", Path.home() / ".streamlit/secrets.toml")
-        return st.secrets.get("ORACLE_API_URL", "") if any(p.exists() for p in paths) else ""
+        # touching st.secrets without a secrets file renders an error box, so check Streamlit's own paths first
+        if not any(Path(p).exists() for p in st.get_option("secrets.files")):
+            return ""
+        try:
+            return str(st.secrets.get("ORACLE_API_URL", "") or "")
+        except Exception:  # noqa: BLE001 — malformed secrets must not take the dashboard down
+            return ""
 
     with st.sidebar:
         st.header("Capacity Oracle")
@@ -106,6 +110,8 @@ def main():
         st.stop()
 
     # 1. status strip
+    if offline:
+        st.info("🧪 Demo data: live API not connected yet")
     st.caption(("🟡 sample data (nothing stored yet)" if src == "sample" else "🟢 live")
                + f" · {age_text(c3.get('generated_at'), now)} · {accuracy_text(c2)}")
     st.markdown(f"## Recommendation: {c3['recommendation'].replace('_', '-')}")
