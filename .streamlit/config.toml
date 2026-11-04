@@ -1,0 +1,12 @@
+# Dashboard theme (achromatic ledger): ink chrome, blue-grey "meter" ground, white cards.
+# Streamlit Cloud reads this from the repo root. Fonts are loaded in service/dashboard/app.py.
+[theme]
+base = "light"
+primaryColor = "#141414"
+backgroundColor = "#f2f4f7"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#0a0a0a"
+font = "sans serif"
+
+[client]
+toolbarMode = "minimal"

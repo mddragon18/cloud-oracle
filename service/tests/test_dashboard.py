@@ -26,9 +26,11 @@ def test_accuracy_null():
 
 
 def test_cards_and_delta():
-    assert dash.option_lines(C3["options"][0])[0] == "**6 × t3.micro**"
+    card = dash.option_card_html(C3["options"][0], True)
+    assert "6 × t3.micro" in card and "Recommended" in card and "&#36;1.61" in card and "$" not in card
+    assert dash.headline(C3) == "Scale out to 6 × t3.micro"
+    assert "&#36;1.61" in dash.kpi_html(C3) and "5,000" in dash.kpi_html(C3)
     assert "vs current" in dash.delta_text(C3)
-    assert dash.option_lines(C3["options"][0])[1].startswith("\\$")  # escaped for Streamlit markdown
     assert dash.age_text("2026-10-25T10:08:00Z", NOW) == "updated 7 min ago"
 
 
@@ -48,7 +50,7 @@ def test_page_renders_offline():
     from streamlit.testing.v1 import AppTest
     at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "dashboard" / "app.py"), default_timeout=30).run()
     assert not at.exception
-    assert any("Recommendation" in m.value for m in at.markdown)
+    assert any("Scale out to" in m.value for m in at.markdown)
 
 
 def test_confidence_texts_and_offline_quality():
@@ -80,3 +82,24 @@ def test_live_mode_not_shifted():
     assert Client("http://x")._demo(doc) is doc  # live: untouched object
     assert Client(None)._demo(doc, "live") is doc  # stored local results: untouched
     assert shift_times(doc, timedelta(hours=1))["exhaustion_at"] is None
+
+
+def test_runway_marks_crossing():
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
+    assert "left:25.0%" in dash.runway_html("2026-10-25T18:00:00Z", 1440, now, 70)
+    assert "no crossing" in dash.runway_html(None, 1440, now, 70)
+    past = dash.runway_html("2026-10-25T11:00:00Z", 1440, now, 70)  # past -> mark at now, label pinned left
+    assert 'style="left:0.0%"' in past and "exceeded at 11:00 UTC" in past and "left:0;transform:none" in past
+    assert "right:0" in dash.runway_html("2026-10-26T11:00:00Z", 1440, now, 70)  # near the end -> pinned right
+
+
+def test_compare_line_from_plan_numbers():
+    s = dash.compare_html(C3)
+    assert s == ("&#36;1.61/day against &#36;4.30/day to scale up · 52 ms expected latency against 47 ms · "
+                 "no single point of failure")
+
+
+def test_sparse_note():
+    assert dash.sparse_note(1, 2) == ("This data has 1 forecast point and 2 metric rows, so the chart shows points "
+                                      "rather than lines. Live data fills the next 24 h.")
+    assert dash.sparse_note(96, 18) is None and dash.sparse_note(1, 18) is None
