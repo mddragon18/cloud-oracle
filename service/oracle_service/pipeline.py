@@ -9,7 +9,7 @@ from .sources import get_source, parse_ts
 from .store import get_store
 
 log = logging.getLogger(__name__)
-STALE_MIN = 30
+STALE_MIN = alerts.STALE_MIN
 
 
 def run_once(cfg: config.Config | None = None, force_alert: bool = False) -> dict:
@@ -26,7 +26,7 @@ def run_once(cfg: config.Config | None = None, force_alert: bool = False) -> dic
         store = get_store(cfg)
         store.put("forecast", c2)
         store.put("plan", c3)
-        alert = alerts.check(c3, store, cfg, force=force_alert)
+        alert = alerts.check(c3, store, cfg, force=force_alert, c2=c2, data_age_minutes=age)
     except Exception:
         log.exception(json.dumps({"event": "pipeline_failed", "ms": round((time.monotonic() - t0) * 1000)}))
         raise

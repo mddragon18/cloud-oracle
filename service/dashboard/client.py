@@ -29,7 +29,7 @@ class Client:
             except ValueError:
                 detail = r.text
             raise ApiError(f"{path} returned {r.status_code}: {str(detail)[:200]}")
-        return r.json(), r.headers.get("X-Oracle-Source", "live")
+        return r.json(), r.headers
 
     def _offline(self, fn, *args):
         # Offline = contract sample data only: never S3/DynamoDB, never AWS credentials.
@@ -43,14 +43,20 @@ class Client:
         except Exception as e:
             raise ApiError(f"offline mode failed: {str(e)[:200]}") from e
 
-    def forecast(self) -> tuple[dict, str]:
+    def forecast(self) -> tuple[dict, str, dict]:
+        """-> (C2, 'live'|'sample', {"confidence": "low"|"normal", "data_age_minutes": int|None})."""
         if self.base_url:
-            return self._http("GET", "/forecast/latest")
-        return self._offline(lambda a: a.latest, "forecast")
+            doc, h = self._http("GET", "/forecast/latest")
+            age = h.get("X-Oracle-Data-Age-Minutes")
+            return doc, h.get("X-Oracle-Source", "live"), {
+                "confidence": h.get("X-Oracle-Confidence", "normal"), "data_age_minutes": int(age) if age else None}
+        doc, src = self._offline(lambda a: a.latest, "forecast")
+        return doc, src, self._offline(lambda a: a.quality, doc)
 
     def plan(self) -> tuple[dict, str]:
         if self.base_url:
-            return self._http("GET", "/plan/latest")
+            doc, h = self._http("GET", "/plan/latest")
+            return doc, h.get("X-Oracle-Source", "live")
         return self._offline(lambda a: a.latest, "plan")
 
     def whatif(self, rpm: int) -> dict:

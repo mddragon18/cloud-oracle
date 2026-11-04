@@ -1,4 +1,5 @@
-"""Capacity-exhaustion alerts via SNS, de-duplicated through the store's 'alert' kind."""
+"""Capacity alerts via SNS, guarded against stale / low-confidence data and de-duplicated via the store's 'alert' kind."""
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
@@ -9,12 +10,25 @@ from .store import iso
 log = logging.getLogger(__name__)
 SAME_EXHAUSTION = timedelta(minutes=30)
 RESEND_AFTER = timedelta(minutes=60)
+STALE_MIN = 30
 
 
-def should_alert(c3: dict, now: datetime, window_min: int) -> bool:
-    """True if exhaustion_at is set and falls within window_min of now (past-due counts)."""
+def low_confidence(c2: dict | None) -> bool:
+    """Naive model or no measured accuracy -> numbers may be unrealistic."""
+    if not c2:
+        return False
+    return c2.get("model") == "naive" or (c2.get("accuracy") or {}).get("mape_pct") is None
+
+
+def alert_kind(c3: dict, now: datetime, window_min: int) -> str | None:
+    """'exhaustion' if 0 <= minutes left <= window, 'exceeded' if exhaustion_at is already past, else None."""
     ex = c3.get("exhaustion_at")
-    return ex is not None and parse_ts(ex) - now <= timedelta(minutes=window_min)
+    if ex is None:
+        return None
+    left = parse_ts(ex) - now
+    if left < timedelta(0):
+        return "exceeded"
+    return "exhaustion" if left <= timedelta(minutes=window_min) else None
 
 
 def is_duplicate(store, exhaustion_at: str | None, now: datetime) -> bool:
@@ -29,9 +43,11 @@ def is_duplicate(store, exhaustion_at: str | None, now: datetime) -> bool:
     return False
 
 
-def message(c3: dict, dashboard_url: str) -> str:
-    lines = [f"Capacity runs out at: {c3.get('exhaustion_at') or 'not forecast (forced test alert)'}",
-             f"Recommendation: {c3['recommendation']} — {c3['reason']}", ""]
+def message(c3: dict, dashboard_url: str, kind: str | None = None) -> str:
+    ex = c3.get("exhaustion_at")
+    head = {"exceeded": f"Capacity already exceeded (forecast crossed the threshold at {ex})",
+            "exhaustion": f"Capacity runs out at: {ex}"}.get(kind, f"Forced test alert (exhaustion_at: {ex or 'none'})")
+    lines = [head, f"Recommendation: {c3['recommendation']} — {c3['reason']}", ""]
     for o in c3["options"]:
         lines.append(f"- {o['strategy']}: {o['instances']} x {o['instance_type']}, ${o['usd_per_day']}/day")
     if dashboard_url:
@@ -51,16 +67,30 @@ def send_alert(cfg: Config, subject: str, body: str, client=None) -> bool:
     return True
 
 
-def check(c3: dict, store, cfg: Config, now: datetime | None = None, force: bool = False, client=None) -> str:
-    """Alert if needed. Returns 'none' | 'duplicate' | 'sent' | 'logged' (no topic configured)."""
+def _skip(why: str, msg: str) -> str:
+    log.info(json.dumps({"event": "alert_skipped", "why": why, "msg": msg}))
+    return why
+
+
+def check(c3: dict, store, cfg: Config, now: datetime | None = None, force: bool = False, client=None,
+          c2: dict | None = None, data_age_minutes: float | None = None) -> str:
+    """Alert if needed. Returns 'none' | 'stale' | 'low_confidence' | 'duplicate' | 'sent' | 'logged' (no topic).
+
+    force=True skips every guard (test alert)."""
     now = now or datetime.now(UTC)
+    kind = alert_kind(c3, now, cfg.alert_window_min)
     if not force:
-        if not should_alert(c3, now, cfg.alert_window_min):
+        if data_age_minutes is not None and data_age_minutes > STALE_MIN:
+            return _skip("stale", "alert skipped: stale data")
+        if low_confidence(c2):
+            return _skip("low_confidence", "alert skipped: low-confidence forecast (naive model or no accuracy)")
+        if kind is None:
             return "none"
         if is_duplicate(store, c3["exhaustion_at"], now):
             return "duplicate"
-    sent = send_alert(cfg, f"[oracle] capacity runs out at {c3.get('exhaustion_at')}",
-                      message(c3, cfg.dashboard_url), client)
+    subject = {"exceeded": "[oracle] capacity already exceeded",
+               "exhaustion": f"[oracle] capacity runs out at {c3.get('exhaustion_at')}"}.get(kind, "[oracle] test alert")
+    sent = send_alert(cfg, subject, message(c3, cfg.dashboard_url, None if force else kind), client)
     store.put("alert", {"generated_at": iso(now), "exhaustion_at": c3.get("exhaustion_at"),
-                        "sent": sent, "forced": force})
+                        "kind": "forced" if force else kind, "sent": sent, "forced": force})
     return "sent" if sent else "logged"
