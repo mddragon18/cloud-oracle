@@ -21,6 +21,18 @@ make -C service test               # plain-script test + pytest (moto for AWS co
 Live local metrics: `make up && make load PATTERN=spike`, then
 `service/scripts/pull_local_metrics.sh` and `ORACLE_SOURCE=local make -C service pipeline-once`.
 
+## Dashboard on Streamlit Community Cloud
+
+Cloud runs `streamlit run service/dashboard/app.py` from the repo root and installs only
+`service/dashboard/requirements.txt`. With no `ORACLE_API_URL` (secrets or env) it starts in offline mode on the
+contract sample data ("Demo data: live API not connected yet"); offline mode never touches AWS.
+To check a change the way Cloud will:
+
+```bash
+python3.11 -m venv /tmp/cloudvenv && /tmp/cloudvenv/bin/pip install -r service/dashboard/requirements.txt
+/tmp/cloudvenv/bin/python service/dashboard/check_cloud.py   # AppTest: every panel, no errors, what-if works
+```
+
 ## Endpoints
 
 | Method | Path | Returns |
