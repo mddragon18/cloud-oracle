@@ -52,18 +52,30 @@ SG_ID=$(aws ec2 describe-security-groups --filters Name=group-name,Values="$SG_N
         --query 'SecurityGroups[0].GroupId' --output text)
 aws ec2 create-tags --resources "$SG_ID" --tags Key=project,Value=oracle 2>/dev/null || true
 
-# --- user data: docker + repo + compose up with S3 upload enabled -----------
+# --- user data: docker + repo + containers with S3 upload enabled -----------
+# Plain docker run instead of compose: AL2023 ships neither compose v1 nor a
+# compose plugin for docker v2, so the AWS box does the same topology by hand.
 USER_DATA=$(cat <<EOF
 #!/bin/bash
 exec > >(tee -a /var/log/user-data.log) 2>&1
-set -x
-dnf install -y docker git docker-compose-plugin -q || dnf install -y docker git -q
+set -ex
+dnf install -y docker git -q
 systemctl enable --now docker
-docker compose version || { echo "FATAL: no compose plugin"; exit 1; }
 git clone --quiet "$REPO" /opt/cloud-oracle
 cd /opt/cloud-oracle/workload
-S3_BUCKET=$BUCKET docker compose up -d --build
-docker compose ps
+docker network create oracle || true
+docker build -q -t oracle-app .
+for n in 1 2 3; do
+    docker volume create data\$n || true
+    docker run -d --name app\$n --network oracle \\
+        -e INSTANCE_ID=i-0\$n-app -e INSTANCE_TYPE=t3.micro \\
+        -e WORKLOAD_PATTERN=steady -e S3_BUCKET=$BUCKET \\
+        -v data\$n:/data oracle-app
+done
+docker run -d --name nginx --network oracle -p 8090:80 \\
+    -v /opt/cloud-oracle/workload/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro \\
+    nginx:alpine
+docker ps
 EOF
 )
 
