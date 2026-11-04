@@ -91,3 +91,15 @@ def test_runway_marks_crossing():
     past = dash.runway_html("2026-10-25T11:00:00Z", 1440, now, 70)  # past -> mark at now, label pinned left
     assert 'style="left:0.0%"' in past and "exceeded at 11:00 UTC" in past and "left:0;transform:none" in past
     assert "right:0" in dash.runway_html("2026-10-26T11:00:00Z", 1440, now, 70)  # near the end -> pinned right
+
+
+def test_compare_line_from_plan_numbers():
+    s = dash.compare_html(C3)
+    assert s == ("&#36;1.61/day against &#36;4.30/day to scale up · 52 ms expected latency against 47 ms · "
+                 "no single point of failure")
+
+
+def test_sparse_note():
+    assert dash.sparse_note(1, 2) == ("This data has 1 forecast point and 2 metric rows, so the chart shows points "
+                                      "rather than lines. Live data fills the next 24 h.")
+    assert dash.sparse_note(96, 18) is None and dash.sparse_note(1, 18) is None

@@ -75,6 +75,27 @@ def headline(c3: dict) -> str:
     return f"{verb} to {o['instances']} × {o['instance_type']}"
 
 
+def sparse_note(n_forecast: int, n_actual: int) -> str | None:
+    """Honest note for a chart with too few points to draw a line; None when the chart is dense enough."""
+    if n_forecast >= 3 or n_actual >= 3:
+        return None
+    pts = lambda n, w: f"{n} {w}{'' if n == 1 else 's'}"
+    return (f"This data has {pts(n_forecast, 'forecast point')} and {pts(n_actual, 'metric row')}, "
+            "so the chart shows points rather than lines. Live data fills the next 24 h.")
+
+
+def compare_html(c3: dict) -> str:
+    """Subline built from the plan's numbers (planner's own `reason` text is shown as a note elsewhere)."""
+    rec = _rec(c3)
+    alt = next((o for o in c3["options"] if o is not rec), None)
+    spof = "a single point of failure" if rec["single_point_of_failure"] else "no single point of failure"
+    if alt is None:
+        return f"{_usd(rec['usd_per_day'])}/day · {rec['expected_latency_ms']:,.0f} ms expected latency · {spof}"
+    other = "scale up" if alt["strategy"] == "scale_up" else "scale out"
+    return (f"{_usd(rec['usd_per_day'])}/day against {_usd(alt['usd_per_day'])}/day to {other} · "
+            f"{rec['expected_latency_ms']:,.0f} ms expected latency against {alt['expected_latency_ms']:,.0f} ms · {spof}")
+
+
 def kpi_html(c3: dict) -> str:
     """Five-cell KPI strip; money in bold, everything in tabular figures."""
     o, cur = _rec(c3), c3["current"]
@@ -146,9 +167,14 @@ CSS = """
 .block-container { max-width: 1180px; padding: 20px 24px 64px; }
 [data-testid="stVerticalBlock"] { gap: 12px; }
 /* cards: white sheet, 1px edge, no shadow */
-[data-testid="stVerticalBlockBorderWrapper"]:has(> div > [data-testid="stVerticalBlock"]) { border-radius: var(--radius-card); }
-div[data-testid="stVerticalBlockBorderWrapper"][style*="border"], [data-testid="stForm"] {
-  background: var(--surface); border: 1px solid var(--border) !important; border-radius: var(--radius-card); box-shadow: none; }
+/* Streamlit's bordered containers default to text colour at 20% alpha; use the whisper token instead.
+   Unbordered wrappers have a 0px border, so the colour only shows where Streamlit draws one. */
+[data-testid="stVerticalBlockBorderWrapper"] { border-color: var(--border) !important; border-radius: var(--radius-card); }
+/* white only on the innermost wrapper around a chart (the bordered card), never on the page's outer wrappers */
+[data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stPlotlyChart"]):not(:has([data-testid="stVerticalBlockBorderWrapper"])) {
+  background: var(--surface); }
+[data-testid="stForm"] { background: var(--surface); border: 1px solid var(--border) !important;
+  border-radius: var(--radius-card); box-shadow: none; }
 [data-testid="stForm"] { padding: 16px 20px; }
 h1, h2, h3 { letter-spacing: -0.01em; color: var(--text); }
 .stApp h1 { font-size: 28px; font-weight: 600; line-height: 1.2; padding: 0; margin: 0; }
@@ -289,7 +315,7 @@ def main():
                 f'{"Sample data" if src == "sample" else "Live"} · {age_text(c3.get("generated_at"), now)} · '
                 f'{data_age_text(quality["data_age_minutes"])} · {escape(accuracy_text(c2))}</div>',
                 unsafe_allow_html=True)
-    st.markdown(f"<h1>{escape(headline(c3))}</h1><div class='reason'>{escape(c3.get('reason', ''))}</div>",
+    st.markdown(f"<h1>{escape(headline(c3))}</h1><div class='reason'>{compare_html(c3)}</div>",
                 unsafe_allow_html=True)
 
     # 2. the finding (countdown) and the capacity runway
@@ -323,15 +349,19 @@ def main():
         if not actual.empty:
             fig.add_trace(go.Scatter(x=actual.timestamp, y=actual[col], name="actual",
                                      line={"color": INK, "width": 2}))
-        fig.add_trace(go.Scatter(x=fc.timestamp, y=fc[col], name="forecast",
-                                 line={"color": HUE, "width": 2, "dash": "dash"}))
+        few = len(fc) < 3
+        fig.add_trace(go.Scatter(x=fc.timestamp, y=fc[col], name="forecast", mode="lines+markers" if few else "lines",
+                                 line={"color": HUE, "width": 2, "dash": "dash"}, marker={"size": 9, "color": HUE}))
         if threshold is not None:
             fig.add_hline(y=threshold, line={"color": "#8a8a8a", "width": 1, "dash": "dash"},
                           annotation_text=f"{threshold:g}% limit", annotation_font_color=MUTED)
         style(fig, height, label)
         with st.container(border=True):
             st.plotly_chart(fig, use_container_width=True, theme=None, config={"displayModeBar": False})
+            if note:
+                st.caption(note)
 
+    note = sparse_note(len(fc), len(actual))
     chart("requests_per_min", "requests / min", band=True, height=280)
     cpu_col, mem_col = st.columns(2)
     with cpu_col:
@@ -348,8 +378,9 @@ def main():
     st.subheader(f"Options for peak {c3['peak_requests_per_min']:,.0f} req/min")
     cards(c3)
     cur = c3["current"]
+    note = f' · Planner note: {escape(c3["reason"])}' if c3.get("reason") else ""
     st.markdown(f'<div class="foot">Current setup: {cur["instances"]} × {escape(cur["instance_type"])} at '
-                f'{_usd(cur["usd_per_hour"], 4)}/h</div>', unsafe_allow_html=True)
+                f'{_usd(cur["usd_per_hour"], 4)}/h{note.replace("$", "&#36;")}</div>', unsafe_allow_html=True)
 
     # 5. what-if
     st.subheader("What-if")
