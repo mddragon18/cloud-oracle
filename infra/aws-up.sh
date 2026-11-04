@@ -14,7 +14,6 @@ SG_NAME=oracle-sg
 ROLE=oracle-ec2-role
 PROFILE=oracle-ec2
 REPO=https://github.com/mddragon18/cloud-oracle.git
-TAGS="Tags=[{Key=project,Value=oracle}]"
 
 command -v aws >/dev/null || { echo "need aws cli"; exit 1; }
 
@@ -42,15 +41,16 @@ fi
 
 # --- security group: only :8090 for the load generator ----------------------
 if ! aws ec2 describe-security-groups --filters Name=group-name,Values="$SG_NAME" \
-        --query 'SecurityGroups[0]' | grep -q .; then
-    VPC=$(aws ec2 describe-vpcs --filters Name=isDefaultVpc,Values=true --query 'Vpcs[0].VpcId' --output text)
+        --query 'SecurityGroups[0].GroupId' --output text | grep -q '^sg-'; then
+    VPC=$(aws ec2 describe-vpcs --query 'Vpcs[0].VpcId' --output text)
     aws ec2 create-security-group --group-name "$SG_NAME" \
-        --description "cloud-oracle experiment" --vpc-id "$VPC" $TAGS
+        --description "cloud-oracle experiment" --vpc-id "$VPC"
     aws ec2 authorize-security-group-ingress --group-name "$SG_NAME" \
         --protocol tcp --port 8090 --cidr 0.0.0.0/0
 fi
 SG_ID=$(aws ec2 describe-security-groups --filters Name=group-name,Values="$SG_NAME" \
         --query 'SecurityGroups[0].GroupId' --output text)
+aws ec2 create-tags --resources "$SG_ID" --tags Key=project,Value=oracle 2>/dev/null || true
 
 # --- user data: docker + repo + compose up with S3 upload enabled -----------
 USER_DATA=$(cat <<EOF
@@ -72,7 +72,9 @@ INSTANCE_ID=$(aws ec2 run-instances \
     --key-name "$KEYPAIR" --security-group-ids "$SG_ID" \
     --iam-instance-profile Name="$PROFILE" \
     --user-data "$(base64 -w0 <<<"$USER_DATA")" \
-    --count 1 --tag-specifications "$TAGS" \
+    --count 1 \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=project,Value=oracle}]' \
+                       'ResourceType=volume,Tags=[{Key=project,Value=oracle}]' \
     --query 'Instances[0].InstanceId' --output text)
 echo "launched $INSTANCE_ID (t3.micro, $REGION); waiting for it to be running"
 
