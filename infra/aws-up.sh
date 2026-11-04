@@ -55,11 +55,15 @@ aws ec2 create-tags --resources "$SG_ID" --tags Key=project,Value=oracle 2>/dev/
 # --- user data: docker + repo + compose up with S3 upload enabled -----------
 USER_DATA=$(cat <<EOF
 #!/bin/bash
-dnf install -y docker git -q
+exec > >(tee -a /var/log/user-data.log) 2>&1
+set -x
+dnf install -y docker git docker-compose-plugin -q || dnf install -y docker git -q
 systemctl enable --now docker
+docker compose version || { echo "FATAL: no compose plugin"; exit 1; }
 git clone --quiet "$REPO" /opt/cloud-oracle
 cd /opt/cloud-oracle/workload
 S3_BUCKET=$BUCKET docker compose up -d --build
+docker compose ps
 EOF
 )
 
