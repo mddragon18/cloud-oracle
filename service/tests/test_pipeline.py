@@ -45,7 +45,7 @@ def test_failure_stores_nothing(env, monkeypatch):
     monkeypatch.setenv("ORACLE_SOURCE", "local")
     monkeypatch.setenv("LOCAL_METRICS_DIR", str(env / "none"))
     with pytest.raises(ValueError):
-        pipeline_handler({}, None)
+        pipeline.run_once()
     assert not (env / "plan").exists()
 
 
@@ -68,3 +68,16 @@ def test_null_accuracy_stores_and_serves(env):
 def test_stale_data_warns(caplog):
     s = pipeline.run_once()  # sample C1 is from Oct 2026
     assert s["data_age_minutes"] > 30 and "stale_metrics" in caplog.text
+
+
+def test_handler_source_override_and_empty_bucket(env, monkeypatch):
+    import boto3
+    from moto import mock_aws
+    monkeypatch.setenv("ORACLE_SOURCE", "s3")
+    monkeypatch.setenv("METRICS_BUCKET", "oracle-empty-bucket")
+    with mock_aws():
+        boto3.client("s3", region_name="ap-south-1").create_bucket(
+            Bucket="oracle-empty-bucket", CreateBucketConfiguration={"LocationConstraint": "ap-south-1"})
+        r = pipeline_handler({}, None)
+        assert r["ok"] is False and "no metrics/" in r["error"] and not (env / "plan").exists()
+        assert pipeline_handler({"source": "sample"}, None)["ok"] is True

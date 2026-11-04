@@ -24,6 +24,7 @@ sub = " ".join(s.value for s in at.subheader)
 for panel in ("Forecast vs actual", "Options for peak", "What-if", "History (7 days)"):
     assert panel in sub, f"missing panel {panel!r}"
 assert "Recommendation:" in md and "scale-out" in md
+assert len(at.get("plotly_chart")) >= 3, "expected rpm, CPU and memory charts"
 countdown = [x.value for x in (*at.success, *at.warning, *at.error) if "CPU" in x.value or "exhaustion" in x.value]
 assert countdown, "missing exhaustion countdown"
 

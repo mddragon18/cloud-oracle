@@ -1,0 +1,23 @@
+# Lambda container image for oracle-api and oracle-pipeline (same image, different CMD).
+# Build natively on Apple Silicon: docker build --platform linux/arm64 --provenance=false (Lambda arch = arm64).
+FROM public.ecr.aws/lambda/python:3.11
+
+COPY service/requirements.txt service-requirements.txt
+COPY forecasting/requirements.txt forecasting-requirements.txt
+COPY capacity/requirements.txt capacity-requirements.txt
+# capacity/requirements.txt also lists pytest; drop test-only deps from the image.
+# --only-binary: the AL2 base (glibc 2.26) has no compiler; pick the newest versions with wheels for it
+# matplotlib is only for forecasting/evaluate.py (offline reports), not the Lambda path (~90 MB with deps)
+RUN grep -v '^pytest' capacity-requirements.txt > cap.txt && \
+    grep -v '^matplotlib' forecasting-requirements.txt > fc.txt && \
+    pip install --no-cache-dir --only-binary=:all: -r service-requirements.txt -r fc.txt -r cap.txt && \
+    rm -f *-requirements.txt cap.txt fc.txt
+
+# Top-level packages under ${LAMBDA_TASK_ROOT}; config.py finds contracts/ beside oracle_service/
+COPY service/oracle_service ${LAMBDA_TASK_ROOT}/oracle_service
+COPY forecasting ${LAMBDA_TASK_ROOT}/forecasting
+COPY capacity ${LAMBDA_TASK_ROOT}/capacity
+COPY contracts ${LAMBDA_TASK_ROOT}/contracts
+ENV MPLCONFIGDIR=/tmp
+
+CMD ["oracle_service.lambda_handlers.api_handler"]

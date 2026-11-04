@@ -1,0 +1,11 @@
+# BuildKit reads <Dockerfile>.dockerignore; keeps the build context small
+*
+!service/requirements.txt
+!service/oracle_service/**
+!forecasting/**
+!capacity/**
+!contracts/**
+**/__pycache__
+**/tests
+forecasting/notebooks
+forecasting/results
