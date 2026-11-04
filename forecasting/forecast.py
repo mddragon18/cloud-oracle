@@ -2,8 +2,8 @@
 
 ARIMA with daily Fourier terms on 15-minute load, once there are >= 2 days of
 history (1 day to train + 1 held-out day for accuracy). Shorter inputs fall back
-to a linear trend that needs only the stdlib, so callers without pandas/statsmodels
-(capacity, service tests on the 2-row sample) keep working.
+to a flat recent average that needs only the stdlib, so callers without
+pandas/statsmodels (capacity, service tests on the 2-row sample) keep working.
 """
 import csv
 import json
@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 NUMERIC = ("requests_per_min", "avg_latency_ms", "p95_latency_ms", "cpu_pct",
            "mem_pct", "net_in_kb", "net_out_kb", "disk_used_gb")
 MIN_HISTORY_MINUTES = 2 * 1440
+NAIVE_WINDOW_MINUTES = 30  # short-history fallback averages the last 30 minutes
 FOURIER_K = 3  # harmonics of the daily cycle; 3 fits a day/night shape without overfitting
 
 
@@ -83,16 +84,21 @@ def _row(ts, rpm, cpu, mem, lower, upper):
 
 
 def _naive(points, horizon_minutes, step_minutes):
-    """Straight line through first and last point. Accuracy is null: nothing was held out."""
-    (t0, rpm0, cpu0, mem0), (t1, rpm1, cpu1, mem1) = points[0], points[-1]
-    minutes = (t1 - t0).total_seconds() / 60
-    s_rpm, s_cpu, s_mem = (rpm1 - rpm0) / minutes, (cpu1 - cpu0) / minutes, (mem1 - mem0) / minutes
-    series = []
-    for step in range(1, horizon_minutes // step_minutes + 1):
-        ahead = step * step_minutes
-        rpm = rpm1 + s_rpm * ahead
-        series.append(_row(t1 + timedelta(minutes=ahead), rpm, cpu1 + s_cpu * ahead,
-                           mem1 + s_mem * ahead, rpm * 0.92, rpm * 1.08))
+    """Flat line at the recent average, banded by recent spread. Accuracy is null: nothing held out.
+
+    Deliberately no trend: extrapolating minutes of noisy data over 24 h ran away
+    (20 real rows -> 84,728 rpm forecast, service/PROGRESS.md).
+    """
+    import statistics
+    recent = points[-NAIVE_WINDOW_MINUTES:]
+    rpm = statistics.fmean(p[1] for p in recent)
+    cpu = statistics.fmean(p[2] for p in recent)
+    mem = statistics.fmean(p[3] for p in recent)
+    spread = statistics.pstdev(p[1] for p in recent)
+    band = max(1.28 * spread, 0.08 * rpm)  # 80% band like ARIMA's, at least +-8%
+    last = points[-1][0]
+    series = [_row(last + timedelta(minutes=step * step_minutes), rpm, cpu, mem, rpm - band, rpm + band)
+              for step in range(1, horizon_minutes // step_minutes + 1)]
     return series, {"mape_pct": None, "rmse": None}, "naive"
 
 

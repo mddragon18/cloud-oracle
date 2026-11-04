@@ -11,9 +11,11 @@ C1_COLUMNS = ["timestamp", "instance_id", "instance_type", "requests_per_min", "
               "workload_pattern"]
 PATTERNS = ("steady", "cycle", "spike", "growth")
 
-# shortcut: CPU/latency/network per request are assumed (500 rpm -> ~35% CPU, like the C1 sample);
-# replace with Member 1's measured t3.micro numbers once the AWS run lands.
-CPU_BASE, CPU_PER_RPM = 5.0, 0.06
+# CPU per request measured on the 2026-11-04 AWS run (data/aws-run-2026-11-04-notes.md):
+# ~2,100 rpm at ~57% host CPU on one t3.micro -> 2.7% per 100 rpm (500 rpm ~ 13.5%).
+# shortcut: latency/network/memory per request are still assumed; memory (which binds first
+# on t3.micro) is not linear in rpm there, so don't read exhaustion from synthetic mem_pct.
+CPU_BASE, CPU_PER_RPM = 0.0, 0.027
 
 
 def rpm_pattern(pattern, days=7, start="2026-10-01T00:00:00Z", seed=0):
