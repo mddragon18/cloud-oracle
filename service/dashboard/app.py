@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from client import ApiError, Client
 
 ACTUAL, FORECAST, THRESHOLD = "#2a78d6", "#52514e", "#b3261e"  # palette slot 1; forecast in secondary ink
+MEM_LIMIT_PCT = 85  # Member 1's AWS run: RAM, not CPU, binds on t3.micro (~620 rpm); dashboard-only marker
 
 
 # ---------- pure helpers (tested in service/tests/test_dashboard.py) ----------
@@ -144,14 +145,18 @@ def main():
         fig.add_trace(go.Scatter(x=fc.timestamp, y=fc[col], name="forecast",
                                  line={"color": FORECAST, "width": 2, "dash": "dash"}))
         if threshold is not None:
-            fig.add_hline(y=threshold, line={"color": THRESHOLD, "width": 1, "dash": "dot"},
+            fig.add_hline(y=threshold, line={"color": THRESHOLD, "width": 1, "dash": "dash"},
                           annotation_text=f"{threshold:g}% threshold")
         fig.update_layout(height=300, margin={"l": 0, "r": 0, "t": 10, "b": 0}, hovermode="x unified",
                           yaxis_title=label, legend={"orientation": "h", "y": 1.1})
         st.plotly_chart(fig, use_container_width=True)
 
     chart("requests_per_min", "requests / min", band=True)
-    chart("cpu_pct", "CPU %", band=False, threshold=c2.get("cpu_threshold_pct", 70))
+    cpu_col, mem_col = st.columns(2)
+    with cpu_col:
+        chart("cpu_pct", "CPU %", band=False, threshold=c2.get("cpu_threshold_pct", 70))
+    with mem_col:
+        chart("mem_pct", "memory %", band=False, threshold=MEM_LIMIT_PCT)
 
     # 4. options
     def cards(plan: dict):
