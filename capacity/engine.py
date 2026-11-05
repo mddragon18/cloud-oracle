@@ -5,7 +5,7 @@ Produces Contract C3 output from a C2 forecast and a baseline result.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 import pandas as pd  # kept for potential future use
@@ -35,6 +35,79 @@ def _apply_memory_constraint(
             required += config_module.SAFETY_MARGIN_INSTANCES
             return required, True
     return instances, False
+
+
+def _calculate_memory_exhaustion(
+    forecast: dict,
+    peak_requests_per_min: float,
+    recommendation: str,
+    scale_out_instances: int,
+    scale_out_type: str,
+    scale_up_instances: int,
+    scale_up_type: str,
+    config_module,
+) -> Optional[str]:
+    """Calculate when memory would be exhausted based on forecast trend.
+
+    Returns ISO timestamp string or None if memory is not the binding constraint.
+    """
+    # Get the recommended strategy's instance type and count
+    if recommendation == "scale_out":
+        instance_type = scale_out_type
+        instances = scale_out_instances
+    else:
+        instance_type = scale_up_type
+        instances = scale_up_instances
+
+    # Only t3 family has memory constraints defined
+    if instance_type not in config_module.T3_OOM_RPM:
+        return None
+
+    oom_rpm_per_instance = config_module.T3_OOM_RPM[instance_type]
+    max_rpm = instances * oom_rpm_per_instance
+
+    # If peak is already above memory limit, exhaustion is now
+    if peak_requests_per_min >= max_rpm:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Forecast must have series with trend to project
+    series = forecast.get("series", [])
+    if len(series) < 2:
+        return None
+
+    # Estimate RPM growth rate from forecast series
+    try:
+        first_rpm = float(series[0].get("requests_per_min", 0))
+        last_rpm = float(series[-1].get("requests_per_min", 0))
+        first_ts = datetime.fromisoformat(series[0]["timestamp"].replace("Z", "+00:00"))
+        last_ts = datetime.fromisoformat(series[-1]["timestamp"].replace("Z", "+00:00"))
+        minutes_span = (last_ts - first_ts).total_seconds() / 60.0
+        if minutes_span <= 0:
+            return None
+        rpm_per_min = (last_rpm - first_rpm) / minutes_span
+        if rpm_per_min <= 0:
+            return None  # Not growing
+    except (KeyError, ValueError, IndexError):
+        return None
+
+    # Time until memory limit reached
+    rpm_gap = max_rpm - peak_requests_per_min
+    if rpm_gap <= 0:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    minutes_to_oom = rpm_gap / rpm_per_min
+    if minutes_to_oom <= 0:
+        return None
+
+    exhaustion_ts = datetime.now(timezone.utc)  # Use current time as base since peak is current
+    # Better: use the peak timestamp from forecast if available
+    try:
+        peak_ts = max(datetime.fromisoformat(s["timestamp"].replace("Z", "+00:00")) for s in series if s.get("requests_per_min") == peak_requests_per_min)
+    except (ValueError, StopIteration):
+        peak_ts = datetime.now(timezone.utc)
+
+    exhaustion_ts = peak_ts + timedelta(minutes=minutes_to_oom)
+    return exhaustion_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def plan_for_rpm(
@@ -176,54 +249,55 @@ def plan(
     scale_out_hourly = scale_out_instances * scale_out_price
     scale_out_daily = scale_out_hourly * 24
 
-    # Scale-up: evaluate larger instance types configured
-    scale_up_options = []
-    # For simplicity, choose the smallest larger instance type that has a price
-    # We evaluate a single scale-up option using a configured larger type.
-    # To keep it deterministic, pick the first larger type from candidates
-    # that is larger than current.
+    # Scale-up: evaluate all larger instance types and pick the cheapest that fits
+    # We evaluate each candidate, apply memory constraints, and compute daily cost
     larger_candidates = [t for t in config.CANDIDATE_INSTANCE_TYPES if t != current_type and t in prices]
-    # Sort to have deterministic selection; prefer the smallest larger family type
-    larger_candidates.sort()
-    scale_up_type = current_type
-    scale_up_instances = instances_required
+    
+    # For each candidate, compute: instances needed (with CPU + memory constraints) and daily cost
+    scale_up_options = []
     for candidate in larger_candidates:
-        # Use a provisional multiplier to see if it can reduce instances
         multiplier = config.PROVISIONAL_CAPACITY_MULTIPLIER.get(candidate, 1.0)
-        if multiplier > 1.0:
-            # If larger instance has more capacity, recalculate instances needed
-            # We assume capacity is proportional to multiplier (provisional)
-            scaled_capacity = capacity_per_instance * multiplier
-            scaled_instances = max(math.ceil(peak_requests_per_min / scaled_capacity), 1) + 1 - 1  # safety already in formula
-            # Actually our sizing uses +1 safety margin; reuse sizing logic
-            scaled_instances = sizing.calculate_instance_count(
-                peak_requests_per_min=peak_requests_per_min,
-                capacity_per_instance_rpm=scaled_capacity,
-            )
-            # Only choose if it actually improves (fewer instances or similar with benefit)
-            # For simplicity, pick the first larger candidate that yields feasible instances.
-            if scaled_instances >= 1:
-                scale_up_type = candidate
-                scale_up_instances = scaled_instances
-                break
-    # If no larger candidate improves, keep current (but we must present a different type for scale-up)
-    # Let's enforce a larger type if available; else keep current and document.
-    if scale_up_type == current_type and larger_candidates:
-        scale_up_type = larger_candidates[0]
-        # For larger type, assume same capacity as current (provisional assumption: same performance)
-        # Or use multiplier. We'll use multiplier for capacity estimate.
-        multiplier = config.PROVISIONAL_CAPACITY_MULTIPLIER.get(scale_up_type, 1.0)
         scaled_capacity = capacity_per_instance * max(multiplier, 1.0)
-        scale_up_instances = sizing.calculate_instance_count(
+        scaled_instances = sizing.calculate_instance_count(
             peak_requests_per_min=peak_requests_per_min,
             capacity_per_instance_rpm=scaled_capacity,
         )
-        scale_up_instances = max(scale_up_instances, 1)
-
-    # Apply memory constraint for scale-up
-    scale_up_instances, scale_up_memory_constrained = _apply_memory_constraint(
-        scale_up_type, scale_up_instances, peak_requests_per_min, config
-    )
+        # Apply memory constraint for this candidate
+        scaled_instances, mem_constrained = _apply_memory_constraint(
+            candidate, scaled_instances, peak_requests_per_min, config
+        )
+        if scaled_instances < 1:
+            scaled_instances = 1
+        # Must have a price
+        if candidate not in prices:
+            continue
+        candidate_price = prices[candidate]
+        daily_cost = scaled_instances * candidate_price * 24
+        scale_up_options.append({
+            "instance_type": candidate,
+            "instances": scaled_instances,
+            "daily_cost": daily_cost,
+            "hourly_cost": scaled_instances * candidate_price,
+            "memory_constrained": mem_constrained,
+            "multiplier": multiplier,
+        })
+    
+    # Pick the cheapest viable option
+    if scale_up_options:
+        scale_up_options.sort(key=lambda x: x["daily_cost"])
+        best = scale_up_options[0]
+        scale_up_type = best["instance_type"]
+        scale_up_instances = best["instances"]
+        scale_up_memory_constrained = best["memory_constrained"]
+    else:
+        # Fallback: no larger candidates with prices
+        scale_up_type = current_type
+        scale_up_instances = instances_required
+        scale_up_memory_constrained = False
+        # Apply memory constraint to fallback
+        scale_up_instances, scale_up_memory_constrained = _apply_memory_constraint(
+            scale_up_type, scale_up_instances, peak_requests_per_min, config
+        )
 
     # If scale_up_instances is same as scale_out, we still present it but note limitations
     # Ensure scale-up has a price
@@ -358,6 +432,21 @@ def plan(
 
     # Propagate forecast exhaustion time
     exhaustion_at = forecast.get("exhaustion_at")
+
+    # Calculate memory-based exhaustion for the recommended strategy
+    # Whichever runs out first (CPU or memory) determines the real exhaustion
+    memory_exhaustion_at = _calculate_memory_exhaustion(
+        forecast, peak_requests_per_min, recommendation,
+        scale_out_instances, scale_out_type,
+        scale_up_instances, scale_up_type,
+        config
+    )
+    # Use the earlier of CPU exhaustion or memory exhaustion
+    if memory_exhaustion_at and exhaustion_at:
+        if memory_exhaustion_at < exhaustion_at:
+            exhaustion_at = memory_exhaustion_at
+    elif memory_exhaustion_at and not exhaustion_at:
+        exhaustion_at = memory_exhaustion_at
 
     result = {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
