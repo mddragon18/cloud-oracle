@@ -13,7 +13,7 @@ Frozen formats: [`contracts/README.md`](contracts/README.md).
 | Folder | Module | Owner | Status |
 |---|---|---|---|
 | `contracts/` | C1–C3 samples + schema notes | Member 4 (everyone reviews) | frozen |
-| `workload/`, `infra/` | 1 — app, collector, Locust, AWS experiment infra | Member 1 | app + collector done; infra Phase III |
+| `workload/`, `infra/` | 1 — app, collector, Locust, AWS experiment infra | Member 1 | done (3 real AWS runs + datasets; report: `docs/module1-report.md`) |
 | `forecasting/` | 2 — `load_metrics()`, `forecast()` | Member 2 | stub (linear trend) |
 | `capacity/` | 3 — `baseline()`, `plan()`, `pricing.json` | Member 3 | stub (placeholder prices) |
 | `service/` | 4 — API, pipeline, dashboard, deploy | Member 4 | offline core done; dashboard + AWS next |
