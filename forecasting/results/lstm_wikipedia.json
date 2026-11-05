@@ -1,0 +1,8 @@
+{
+  "dataset": "wikipedia",
+  "model": "lstm",
+  "run": "Colab, 2026-11-05, forecasting/notebooks/lstm_colab.ipynb from main (LSTM(64) -> Dense(96), 1 day in -> 1 day out, seed 0)",
+  "mae": 28.57,
+  "rmse": 31.44,
+  "mape_pct": 4.1
+}
