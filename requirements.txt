@@ -1,7 +1,10 @@
-# Root requirements for the Streamlit Cloud deploy of the dashboard
-# (service/dashboard/app.py). Cloud auto-installs only this file.
-# API/pipeline deps live in service/requirements.txt; those run on AWS Lambda.
+# Streamlit Community Cloud installs only this file (main file: service/dashboard/app.py, Python 3.11).
+# Keep identical to the root requirements.txt: Streamlit Cloud may install either one.
+# Offline mode imports service/oracle_service/core.py + forecasting/ + capacity/ at load time.
+# No fastapi/boto3/statsmodels/matplotlib: the 2-row contract sample always takes forecast()'s naive path.
 streamlit==1.38.*
 plotly>=5.20,<6
 pandas>=2.1,<3
+numpy>=1.24,<3
+pydantic==2.*
 requests>=2.31,<3

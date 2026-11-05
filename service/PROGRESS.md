@@ -7,7 +7,7 @@ COMPLETED:
 - W0: Python 3.11 venv (uv), `make test` green; HANDOFF.md in service/ (branch m4-setup)
 - W1: CI workflow (installs service + forecasting + capacity reqs, `make test`, pytest, ruff non-blocking), PR template, root README, docs/ index (m4-ci)
 - W2: oracle_service package (sample/local/S3 sources, Local/Dynamo stores, pipeline, alerts, API + /metrics/recent), shim, tests (m4-service-core)
-- Team decisions 2026-11-04: AGGREGATE_MODE default "raw" (aggregate() kept for /metrics/recent); C2 accuracy fields nullable, model free str; skipped test documents Member 3 storage bug
+- Team decisions 2026-11-04: AGGREGATE_MODE default "raw" (aggregate() kept for /metrics/recent); C2 accuracy fields nullable, model free str; Member 3 storage bug fixed (storage_growth_gb_per_day), test un-skipped
 - W2 finish: stale-metrics warning (data_age_minutes in run summary, >30 min warns), ruff clean, /metrics/recent in contracts/README API table
 - Makefile :8080 -> :8090 comment fix on branch m4-makefile-port (for Member 1)
 - W3: Streamlit dashboard (service/dashboard/) with all 6 panels, offline toggle, error states; pure helpers + AppTest render smoke test (m4-dashboard)
@@ -29,15 +29,7 @@ NEEDS TEAM DECISION:
 - Post in group: additive endpoint GET /metrics/recent?hours=24
 - Root .gitignore: added data/forecast/, data/plan/, data/alert/, data/local-metrics/ — shared file, flag in PR
 KNOWN BUGS (other modules — not fixed here):
-- Member 2 — naive forecast extrapolation: with little history forecast() falls back to "naive", whose linear trend runs away
-  over 24 h. Real S3 run 2026-11-04 14:36Z (20 rows): peak 84,728 rpm, CPU 100%, memory -> 0%; plan 35 x t3.micro $9.41/day
-  vs Member 1's local ARIMA on the full CSV (~5,616 rpm, 2 x t3.micro $0.54/day). Needs a bounded naive fallback.
-  Service mitigation (m4-alert-guards): no alerts on naive/null-accuracy forecasts; X-Oracle-Confidence: low + dashboard banner.
-- Member 3 — CPU-only sizing: plan() sizes instances from CPU (capacity_rpm_at_70), but Member 1's AWS run shows RAM binds first
-  on t3.micro (stack runs out of memory at ~620 rpm). Dashboard charts mem_pct with an 85% line; capacity/ untouched.
-- Member 1 — data/aws-run-2026-11-04.csv missing from the repo: root .gitignore `*.csv` drops it (only contracts/*.csv and
-  data/*.sample.csv are allowed); needs `git add -f` or a .gitignore exception. S3 also only holds ~20 rows of that run.
-- Member 3: baseline() storage_gb_per_day wrong with >1 instance (divides by row count, diffs disk across different instances; 2 instances growing 1 GB/day report 12.49). Test: service/tests/test_integration_capacity.py (skipped, "owned by Member 3")
+- Member 3 — memory sizing (#17): 620 rpm per t3.micro is where the stack ran out of memory, not a safe limit, and Member 1 measured it as cluster rpm with 3 replicas on one t3.micro. Plan still recommends t3.micro scale-out.
 - Member 1 (issue #7, fixes merged 2026-11-04): workload/app/collector.py uses net.bytes_in/bytes_out; psutil has bytes_recv/bytes_sent -> collector thread dies on its first row, metrics.csv stays header-only
 - Member 1: workload/locust/locustfile.py fails on locust 2.31: imports Shape (-> LoadTestShape), WorkloadUser(User) has no HTTP client (-> HttpUser), shape() generator (-> tick() returning (users, spawn))
 - Member 1: root Makefile `load` has no RUN_S (hard-coded -t 2m), handoff assumes RUN_S
@@ -52,6 +44,7 @@ AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
 - No reserved concurrency (account limit 10); API throttling is the guard
 - Verified: smoke.sh 7/7 PASS; pipeline {"source":"sample"} ok; real S3 run ok; /history 3 plans; forced alert sent
 - Redeployed 2026-11-04 14:53Z from main 4cb2c83: smoke.sh 7/7 PASS; /plan/latest + /forecast/latest send X-Oracle-Confidence: low and X-Oracle-Data-Age-Minutes: 78 (stored forecast is naive, newest S3 row ~13:37Z); schedule DISABLED
+- Redeployed 2026-11-05 07:32Z from 67a88f5 (main with #12, #15-#17): smoke.sh 7/7 PASS; real S3 run (20 rows): model naive, peak 1,837 rpm (was 84,728), exhaustion none, plan 3 x t3.micro $0.81/day limited by memory, confidence low, data age 1076 min; schedule DISABLED
 LESSONS (mistakes not to repeat):
 - zsh: "$VAR:u" is an uppercase modifier; brace ${VAR} before a colon.
 - Lambda base image (AL2, glibc 2.26) has no compiler: pip --only-binary=:all:.
@@ -59,6 +52,7 @@ LESSONS (mistakes not to repeat):
 - GitHub returned intermittent 5xx on push/PR create (2026-11-04): retry, then check for duplicates.
 - Member 1 = mddragon18 (repo admin, wrote Module 1 scaffold) — inferred, confirm with team.
 - Paths may contain spaces: quote "$(ROOT)" in Makefiles.
+- macOS strips DYLD_* through make/bash: a Homebrew aws broken by the system libexpat needs a wrapper on PATH that sets DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib (or brew reinstall).
 - Streamlit: don't touch st.secrets without a secrets.toml (renders an error box); embedded browser may hang on localhost websockets, use 127.0.0.1.
 NOTES:
 - Extra dev deps: httpx (FastAPI TestClient); dashboard requirements pulled into requirements-dev for the AppTest smoke test.
