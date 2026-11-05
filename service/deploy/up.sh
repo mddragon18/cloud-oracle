@@ -78,7 +78,7 @@ for fn in "$API_FN" "$PIPELINE_FN"; do
 done
 
 log "7. Lambda functions ($ARCH)"
-ENV_VARS="Variables={ORACLE_STORE=dynamo,ORACLE_SOURCE=s3,METRICS_BUCKET=$METRICS_BUCKET,RESULTS_TABLE=$TABLE,ALERT_TOPIC_ARN=$TOPIC_ARN,DASHBOARD_URL=${DASHBOARD_URL:-},MPLCONFIGDIR=/tmp}"
+ENV_VARS="Variables={ORACLE_STORE=dynamo,ORACLE_SOURCE=s3,METRICS_BUCKET=$METRICS_BUCKET,RESULTS_TABLE=$TABLE,ALERT_TOPIC_ARN=$TOPIC_ARN,DASHBOARD_URL=${DASHBOARD_URL:-https://cloud-oracle-ge5svfjhkafdnfipesqylt.streamlit.app},MPLCONFIGDIR=/tmp}"
 deploy_fn() {  # name timeout handler
   local name=$1 timeout=$2 cmd=$3
   if ! aws lambda get-function --function-name "$name" >/dev/null 2>&1; then

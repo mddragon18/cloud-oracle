@@ -25,7 +25,7 @@ def test_too_few_rows(tmp_path):
 
 
 @mock_aws
-def test_s3_newest_cumulative_per_instance():
+def test_s3_cumulative_upload_dedupes_newest_wins():
     s3 = boto3.client("s3", region_name="ap-south-1")
     s3.create_bucket(Bucket="oracle-metrics", CreateBucketConfiguration={"LocationConstraint": "ap-south-1"})
     old = [HDR, line("2026-10-25T10:00:00Z", "i-1", rpm=1)]
@@ -35,3 +35,28 @@ def test_s3_newest_cumulative_per_instance():
     s3.put_object(Bucket="oracle-metrics", Key="metrics/i-2/metrics-20261025T100100Z.csv", Body="\n".join([HDR, line("2026-10-25T10:01:00Z", "i-2")]))
     rows = S3Source("oracle-metrics", "ap-south-1", client=s3).get_rows(168)
     assert len(rows) == 3 and rows[0]["requests_per_min"] == 100
+
+
+@mock_aws
+def test_s3_keeps_every_run_after_collector_restart():
+    s3 = boto3.client("s3", region_name="ap-south-1")
+    s3.create_bucket(Bucket="oracle-metrics", CreateBucketConfiguration={"LocationConstraint": "ap-south-1"})
+    for inst in ("i-1", "i-2"):
+        run1 = [HDR, line("2026-11-04T13:00:00Z", inst), line("2026-11-04T13:01:00Z", inst)]
+        run2 = [HDR, line("2026-11-05T07:00:00Z", inst), line("2026-11-05T07:01:00Z", inst)]
+        s3.put_object(Bucket="oracle-metrics", Key=f"metrics/{inst}/metrics-20261104T130200Z.csv", Body="\n".join(run1))
+        s3.put_object(Bucket="oracle-metrics", Key=f"metrics/{inst}/metrics-20261105T070200Z.csv", Body="\n".join(run2))
+    rows = S3Source("oracle-metrics", "ap-south-1", client=s3).get_rows(168)
+    assert len(rows) == 8
+    assert [r["timestamp"] for r in rows] == sorted(r["timestamp"] for r in rows)
+    assert {(r["timestamp"][:10], r["instance_id"]) for r in rows} == {
+        (d, i) for d in ("2026-11-04", "2026-11-05") for i in ("i-1", "i-2")}
+
+
+def test_exclude_windows_end_exclusive_on_every_source(tmp_path, monkeypatch, caplog):
+    times = ["07:42:00", "07:43:00", "07:52:00", "07:53:00"]
+    (tmp_path / "a.csv").write_text("\n".join([HDR, *[line(f"2026-11-05T{t}Z", "a") for t in times]]))
+    assert [r["timestamp"][11:19] for r in LocalSource(tmp_path).get_rows(168)] == ["07:42:00", "07:53:00"]
+    assert '"dropped": 2' in caplog.text
+    monkeypatch.setenv("EXCLUDE_WINDOWS", "")
+    assert len(LocalSource(tmp_path).get_rows(168)) == 4
