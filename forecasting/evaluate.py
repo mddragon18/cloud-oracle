@@ -39,7 +39,14 @@ def short_run(df, test_minutes=5):
         if (points[i][0] - points[i - 1][0]).total_seconds() > 60:
             start = i  # gap: the unbroken stretch restarts here
     block = points[start:]
-    if len(block) <= test_minutes + 1:
+    if block and block[-1][1] == 0:
+        # idle tail after the load generator stops: nothing to forecast, and MAPE is undefined on 0.
+        # The minute just before it is partial (load stopped mid-minute), so drop it too.
+        while block and block[-1][1] == 0:
+            block.pop()
+        block.pop()
+    test_minutes = min(test_minutes, len(block) // 3)  # short stretches: keep 2/3 for history
+    if test_minutes < 1:
         return None
     first, cut, last = _iso(block[0][0]), _iso(block[-test_minutes][0]), _iso(block[-1][0])
     fc = forecast([r for r in rows if first <= r["timestamp"] < cut])
@@ -97,15 +104,17 @@ def main(step_minutes=15):
                 "csv in data/, which is gitignored), then `python -m forecasting.evaluate`.\n\n"
                 "Known limitation: the spike pattern's spikes land at random times, so no model can\n"
                 "predict them; ARIMA only widens its uncertainty band there.\n\n" + table)
-        # data/aws-run.csv from the loader, or the committed data/aws-run-<date>.csv
-        aws = (sorted(glob.glob(os.path.join(ROOT, "data", "aws-run*.csv"))) or [None])[-1]
-        if aws:
-            import pandas as pd
-            md = short_run(pd.read_csv(aws))
+        # every real run: data/aws-run.csv from the loader, or the committed data/aws-run-<date>*.csv
+        import pandas as pd
+        runs = sorted(glob.glob(os.path.join(ROOT, "data", "aws-run*.csv")))
+        if runs:
+            f.write("\n## Real AWS runs (each ~1 h: too short for a held-out day, small-sample check only)\n\n"
+                    "Data: `aws s3 sync s3://<bucket>/metrics/ <dir>`, then "
+                    "`python -m forecasting.loaders aws-run <dir>`. Phase windows: data/*-notes.md.\n")
+        for path in runs:
+            md = short_run(pd.read_csv(path), test_minutes=15)
             if md:
-                f.write("\n## Real AWS run, 2026-11-04 (too short for a held-out day: small-sample check only)\n\n"
-                        "Data: `aws s3 sync s3://<bucket>/metrics/ <dir>`, then "
-                        "`python -m forecasting.loaders aws-run <dir>`.\n\n" + md)
+                f.write(f"\n### {os.path.basename(path)}\n\n" + md)
                 print(md)
     print(table)
 

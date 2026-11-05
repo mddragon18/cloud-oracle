@@ -22,10 +22,24 @@ predict them; ARIMA only widens its uncertainty band there.
 | azure | same-time-yesterday | 5.9 | 7.3 | 0.85 |
 | wikipedia | lstm (Colab run) | 28.6 | 31.4 | 4.10 |
 
-## Real AWS run, 2026-11-04 (too short for a held-out day: small-sample check only)
+## Real AWS runs (each ~1 h: too short for a held-out day, small-sample check only)
 
-Data: `aws s3 sync s3://<bucket>/metrics/ <dir>`, then `python -m forecasting.loaders aws-run <dir>`.
+Data: `aws s3 sync s3://<bucket>/metrics/ <dir>`, then `python -m forecasting.loaders aws-run <dir>`. Phase windows: data/*-notes.md.
+
+### aws-run-2026-11-04.csv
 
 Unbroken stretch 2026-11-04T13:23:00Z .. 2026-11-04T13:37:00Z (15 min). `forecast()` on the first 10 min gives model `naive`, level 2138 req/min. Against the last 5 min (actual 2072-2278): MAE 49.6, MAPE 2.26%.
 
 Whole run (20 rows, gaps included) gives model `naive`, 24 h peak 1837 req/min (observed per-minute max 2390).
+
+### aws-run-2026-11-05-patterns.csv
+
+Unbroken stretch 2026-11-05T10:14:00Z .. 2026-11-05T11:14:00Z (61 min). `forecast()` on the first 46 min gives model `naive`, level 255 req/min. Against the last 15 min (actual 106-542): MAE 134.1, MAPE 62.61%.
+
+Whole run (198 rows, gaps included) gives model `naive`, 24 h peak 268 req/min (observed per-minute max 542).
+
+### aws-run-2026-11-05.csv
+
+Unbroken stretch 2026-11-05T07:43:00Z .. 2026-11-05T08:46:00Z (64 min). `forecast()` on the first 49 min gives model `naive`, level 328 req/min. Against the last 15 min (actual 311-334): MAE 3.4, MAPE 1.05%.
+
+Whole run (243 rows, gaps included) gives model `naive`, 24 h peak 144 req/min (observed per-minute max 2293).
