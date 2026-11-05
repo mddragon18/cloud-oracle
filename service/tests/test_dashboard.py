@@ -103,3 +103,19 @@ def test_sparse_note():
     assert dash.sparse_note(1, 2) == ("This data has 1 forecast point and 2 metric rows, so the chart shows points "
                                       "rather than lines. Live data fills the next 24 h.")
     assert dash.sparse_note(96, 18) is None and dash.sparse_note(1, 18) is None
+
+
+def test_accuracy_table_parses_main_table_only(tmp_path):
+    f = tmp_path / "a.md"
+    f.write_text("# t\n\n| dataset | model | MAE (req/min) | RMSE | MAPE % |\n|---|---|---|---|---|\n"
+                 "| wikipedia | arima | 1 | 2 | 3.28 |\n| wikipedia | same-time-yesterday | 1 | 2 | 4.68 |\n"
+                 "| wikipedia | lstm (Colab run) | 1 | 2 | 4.10 |\n| azure | arima | 1 | 2 | 1.32 |\n\n"
+                 "## later\n| dataset | model | MAE | RMSE | MAPE % |\n| other | arima | 1 | 2 | 9 |\n")
+    assert dash.accuracy_table(f) == [{"dataset": "wikipedia", "arima": 3.28, "same-time-yesterday": 4.68, "lstm": 4.10},
+                                      {"dataset": "azure", "arima": 1.32}]
+
+
+def test_accuracy_table_missing_or_unrelated_file_hides_panel(tmp_path):
+    assert dash.accuracy_table(tmp_path / "nope.md") == []
+    (tmp_path / "x.md").write_text("no table here")
+    assert dash.accuracy_table(tmp_path / "x.md") == []

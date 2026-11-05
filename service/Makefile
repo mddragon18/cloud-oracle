@@ -20,7 +20,7 @@ test-all: test      # separate pytest runs: service and capacity tests clash whe
 	cd "$(ROOT)" && $(PY) -m pytest capacity -q && $(PY) -m pytest forecasting -q && $(PY) service/dashboard/check_cloud.py
 
 # ---- AWS (W4). AWS_PROFILE=oracle-m4, ap-south-1; see service/deploy/config.sh ----
-.PHONY: build deploy down smoke schedule-on schedule-off invoke
+.PHONY: build deploy down smoke schedule-on schedule-off invoke replay-on replay-off
 
 build:              # Lambda image, native arm64
 	cd "$(ROOT)" && docker build --platform linux/arm64 --provenance=false -f service/deploy/Dockerfile.lambda -t oracle-service:local .
@@ -39,6 +39,12 @@ schedule-on:
 
 schedule-off:
 	"$(ROOT)/service/deploy/schedule.sh" off
+
+replay-on:          # Lambda env only, then reruns the pipeline. make deploy resets replay to off.
+	"$(ROOT)/service/deploy/replay.sh" on
+
+replay-off:
+	"$(ROOT)/service/deploy/replay.sh" off
 
 invoke:             # EVENT='{"source": "sample"}' make -C service invoke
 	cd "$(ROOT)" && . service/deploy/config.sh && aws lambda invoke --function-name $$PIPELINE_FN \

@@ -37,7 +37,10 @@ KNOWN BUGS (other modules — not fixed here):
 - Member 1: psutil 5.9 has no linux/arm64 wheel; on Apple Silicon build with DOCKER_DEFAULT_PLATFORM=linux/amd64 (and pull nginx:alpine for amd64)
 - Main still has stub forecast(); with raw rows it does not sum across instances (peak 429 for 3x~170 rpm). Expected to change with Member 2's merge.
 AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
-- REPLAY_MODE (default off, also off on Lambda): age, confidence, alert window and countdown use the newest metric row; dashboard shows a replay badge. Turn on: REPLAY_MODE=1 make -C service deploy. Not yet deployed or tried on AWS.
+- REPLAY_MODE (default off, also off on Lambda): age, confidence, alert window and countdown use the newest metric row; dashboard shows a replay badge. Turn on: REPLAY_MODE=1 make -C service deploy.
+- Redeployed 2026-11-05 14:2xZ from main 6712062, then replay-on: REPLAY_MODE=1 on both Lambdas; smoke.sh 7/7 PASS; pipeline 431 rows, peak 268 rpm, data age 0, confidence low; schedule DISABLED.
+- Replay switch: make -C service replay-on|replay-off (Lambda env only, keeps other vars, reruns pipeline). down.sh supports DRY_RUN=1. Demo script: service/DEMO.md.
+- Dashboard accuracy panel reads forecasting/results/accuracy.md; LSTM column stays empty until #18 merges.
 - make -C service deploy now runs test-all first (activate .venv); deploy scripts use set -euo pipefail, except sourced config.sh.
 - Stray 84,728 rpm plans deleted from DynamoDB 2026-11-05.
 - API URL: https://fsenmc8m46.execute-api.ap-south-1.amazonaws.com  (Streamlit secret ORACLE_API_URL)

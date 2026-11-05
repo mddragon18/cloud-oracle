@@ -10,6 +10,10 @@ from client import ApiError, Client
 
 # Achromatic ledger (taste-skill app sheet): ink chrome; the one chart hue sits on the forecast, the main data element.
 INK, MUTED, GRID, HUE, HUE_BAND = "#141414", "#6b6b6b", "#eef0f3", "#1d5fbf", "rgba(29,95,191,0.12)"
+ACCURACY_MD = Path(__file__).resolve().parents[2] / "forecasting" / "results" / "accuracy.md"
+ACCURACY_MODELS = (("arima", "ARIMA", HUE), ("lstm", "LSTM", INK), ("same-time-yesterday", "Same time yesterday", "#a3a3a3"))
+ACCURACY_CAPTION = ("Live data covers ~1 h runs, so the live forecast uses the short-history mode; "
+                    "24 h accuracy is measured on Wikipedia and Azure traces.")
 MEM_LIMIT_PCT = 85  # Member 1's AWS run: RAM, not CPU, binds on t3.micro (~620 rpm); dashboard-only marker
 
 
@@ -54,6 +58,28 @@ def countdown(exhaustion_at: str | None, threshold: float, now: datetime) -> tup
 def low_confidence_text(n_rows: int | None) -> str:
     rows = f"only {n_rows} rows of history" if n_rows is not None else "little history"
     return f"Low confidence: {rows}, simple model; numbers may be unrealistic"
+
+
+def accuracy_table(path: Path = ACCURACY_MD) -> list[dict]:
+    """Main table of accuracy.md as [{dataset, arima, lstm, same-time-yesterday}] (MAPE %); [] if missing or unreadable."""
+    if not path.is_file():
+        return []
+    cols, by_dataset = None, {}
+    for line in path.read_text().splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if cols is None:
+            if line.startswith("|") and cells[:2] == ["dataset", "model"] and "MAPE %" in cells:
+                cols = cells
+        elif not line.startswith("|"):
+            break
+        elif len(cells) == len(cols) and not set(cells[0]) <= {"-"}:
+            model = next((m for m, _, _ in ACCURACY_MODELS if cells[1].startswith(m)), None)
+            if model:
+                try:
+                    by_dataset.setdefault(cells[0], {"dataset": cells[0]})[model] = float(cells[cols.index("MAPE %")])
+                except ValueError:
+                    pass
+    return list(by_dataset.values())
 
 
 def replay_text(replay_at: str | None) -> str | None:
@@ -377,6 +403,20 @@ def main():
         chart("cpu_pct", "CPU %", band=False, threshold=c2.get("cpu_threshold_pct", 70))
     with mem_col:
         chart("mem_pct", "memory %", band=False, threshold=MEM_LIMIT_PCT)
+
+    # model accuracy: offline results from Member 2, hidden until the file exists
+    accuracy = accuracy_table()
+    if accuracy:
+        st.subheader("Model accuracy (offline evaluation)")
+        with st.container(border=True):
+            fig = go.Figure([go.Bar(x=[r["dataset"] for r in accuracy], y=[r.get(key) for r in accuracy], name=name,
+                                    marker_color=color) for key, name, color in ACCURACY_MODELS])
+            fig.update_layout(barmode="group")
+            style(fig, 260, "MAPE % (lower is better)")
+            st.plotly_chart(fig, use_container_width=True, theme=None, config={"displayModeBar": False})
+            st.dataframe(pd.DataFrame([{"Dataset": r["dataset"], **{name: f"{r[key]:.2f}" if key in r else "—" for key, name, _ in ACCURACY_MODELS}}
+                                       for r in accuracy]), hide_index=True, use_container_width=True)
+            st.caption(ACCURACY_CAPTION)
 
     # 4. options
     def cards(plan: dict):
