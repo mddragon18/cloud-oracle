@@ -57,7 +57,8 @@ class LocalSource:
 
 
 class S3Source:
-    """Collector layout: metrics/{instance}/metrics-{ts}.csv, each upload cumulative -> newest per instance."""
+    """Collector layout: metrics/{instance}/metrics-{ts}.csv. Uploads are cumulative only within a run
+    and each run restarts the collector, so read every object and let finish() dedupe."""
 
     def __init__(self, bucket: str, region: str, client=None):
         if not bucket:
@@ -72,17 +73,16 @@ class S3Source:
         return self._client
 
     def get_rows(self, since_hours: float) -> list[dict]:
-        newest: dict[str, str] = {}
+        keys = []
         for page in self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix="metrics/"):
             for obj in page.get("Contents", []):
                 parts = obj["Key"].split("/")
                 if len(parts) == 3 and parts[2].endswith(".csv"):
-                    # timestamped names sort chronologically
-                    newest[parts[1]] = max(newest.get(parts[1], ""), obj["Key"])
-        if not newest:
+                    keys.append(obj["Key"])
+        if not keys:
             raise NoMetricsError(f"no metrics/<instance>/*.csv objects in s3://{self.bucket}")
         rows = []
-        for key in newest.values():
+        for key in keys:
             body = self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read().decode()
             rows += parse_csv(body)
         return finish(rows, since_hours)

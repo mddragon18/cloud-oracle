@@ -25,7 +25,7 @@ def test_too_few_rows(tmp_path):
 
 
 @mock_aws
-def test_s3_newest_cumulative_per_instance():
+def test_s3_cumulative_upload_dedupes_newest_wins():
     s3 = boto3.client("s3", region_name="ap-south-1")
     s3.create_bucket(Bucket="oracle-metrics", CreateBucketConfiguration={"LocationConstraint": "ap-south-1"})
     old = [HDR, line("2026-10-25T10:00:00Z", "i-1", rpm=1)]
@@ -35,3 +35,19 @@ def test_s3_newest_cumulative_per_instance():
     s3.put_object(Bucket="oracle-metrics", Key="metrics/i-2/metrics-20261025T100100Z.csv", Body="\n".join([HDR, line("2026-10-25T10:01:00Z", "i-2")]))
     rows = S3Source("oracle-metrics", "ap-south-1", client=s3).get_rows(168)
     assert len(rows) == 3 and rows[0]["requests_per_min"] == 100
+
+
+@mock_aws
+def test_s3_keeps_every_run_after_collector_restart():
+    s3 = boto3.client("s3", region_name="ap-south-1")
+    s3.create_bucket(Bucket="oracle-metrics", CreateBucketConfiguration={"LocationConstraint": "ap-south-1"})
+    for inst in ("i-1", "i-2"):
+        run1 = [HDR, line("2026-11-04T13:00:00Z", inst), line("2026-11-04T13:01:00Z", inst)]
+        run2 = [HDR, line("2026-11-05T07:00:00Z", inst), line("2026-11-05T07:01:00Z", inst)]
+        s3.put_object(Bucket="oracle-metrics", Key=f"metrics/{inst}/metrics-20261104T130200Z.csv", Body="\n".join(run1))
+        s3.put_object(Bucket="oracle-metrics", Key=f"metrics/{inst}/metrics-20261105T070200Z.csv", Body="\n".join(run2))
+    rows = S3Source("oracle-metrics", "ap-south-1", client=s3).get_rows(168)
+    assert len(rows) == 8
+    assert [r["timestamp"] for r in rows] == sorted(r["timestamp"] for r in rows)
+    assert {(r["timestamp"][:10], r["instance_id"]) for r in rows} == {
+        (d, i) for d in ("2026-11-04", "2026-11-05") for i in ("i-1", "i-2")}
