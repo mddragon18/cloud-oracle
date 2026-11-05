@@ -1,7 +1,7 @@
 """Oracle dashboard (HANDOFF §8 W3). Run: streamlit run service/dashboard/app.py"""
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from html import escape
 from pathlib import Path
 
@@ -80,6 +80,16 @@ def accuracy_table(path: Path = ACCURACY_MD) -> list[dict]:
                 except ValueError:
                     pass
     return list(by_dataset.values())
+
+
+def break_gaps(rows: list[dict], max_gap_min: int = 5) -> list[dict]:
+    """Insert a blank row wherever rows are over max_gap_min apart, so a line chart doesn't join separate runs."""
+    out = []
+    for r in rows:
+        if out and parse(r["timestamp"]) - parse(out[-1]["timestamp"]) > timedelta(minutes=max_gap_min):
+            out.append(dict.fromkeys(r) | {"timestamp": r["timestamp"]})
+        out.append(r)
+    return out
 
 
 def replay_text(replay_at: str | None) -> str | None:
@@ -382,7 +392,9 @@ def main():
                                      y=list(fc.upper) + list(fc.lower[::-1]), fill="toself",
                                      fillcolor=HUE_BAND, line={"width": 0}, name="forecast range", hoverinfo="skip"))
         if not actual.empty:
-            fig.add_trace(go.Scatter(x=actual.timestamp, y=actual[col], name="actual",
+            rows = break_gaps(actual.to_dict("records"))
+            fig.add_trace(go.Scatter(x=[r["timestamp"] for r in rows], y=[r[col] for r in rows], name="actual",
+                                     mode="lines+markers", marker={"size": 3, "color": INK},  # lone rows stay visible
                                      line={"color": INK, "width": 2}))
         few = len(fc) < 3
         fig.add_trace(go.Scatter(x=fc.timestamp, y=fc[col], name="forecast", mode="lines+markers" if few else "lines",

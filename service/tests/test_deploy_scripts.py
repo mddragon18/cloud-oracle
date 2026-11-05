@@ -51,3 +51,24 @@ def test_replay_keeps_other_env_and_reruns_pipeline(tmp_path):
     for u in updates:
         assert json.loads(u.split("--environment ", 1)[1])["Variables"] == {"KEEP": "yes", "REPLAY_MODE": "1"}
     assert "lambda invoke" in calls[-1]
+
+
+def current_replay(tmp_path, reply, explicit=""):
+    aws = tmp_path / "aws"
+    aws.write_text(f"#!/bin/bash\n{reply}\n")
+    aws.chmod(aws.stat().st_mode | stat.S_IEXEC)
+    cmd = f'set -euo pipefail; source service/deploy/config.sh; R="${{REPLAY_MODE:-$(current_replay)}}"; echo "got=$R"'
+    return subprocess.run(["bash", "-c", cmd], cwd=REPO, capture_output=True, text=True,
+                          env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "REPLAY_MODE": explicit})
+
+
+def test_deploy_keeps_replay_unless_passed(tmp_path):
+    assert "got=1" in current_replay(tmp_path, "echo 1").stdout
+    assert "got=0" in current_replay(tmp_path, "echo 1", explicit="0").stdout
+    assert "got=0" in current_replay(tmp_path, "echo None").stdout
+    assert "got=0" in current_replay(tmp_path, "echo ResourceNotFoundException; exit 1").stdout
+
+
+def test_deploy_stops_if_replay_unreadable(tmp_path):
+    r = current_replay(tmp_path, "echo AccessDenied; exit 1")
+    assert r.returncode != 0 and "got=" not in r.stdout

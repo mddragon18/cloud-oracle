@@ -39,6 +39,8 @@ KNOWN BUGS (other modules — not fixed here):
 AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
 - REPLAY_MODE (default off, also off on Lambda): age, confidence, alert window and countdown use the newest metric row; dashboard shows a replay badge. Turn on: REPLAY_MODE=1 make -C service deploy.
 - Redeployed 2026-11-05 14:2xZ from main 6712062, then replay-on: REPLAY_MODE=1 on both Lambdas; smoke.sh 7/7 PASS; pipeline 431 rows, peak 268 rpm, data age 0, confidence low; schedule DISABLED.
+- Deploy keeps the Lambda's REPLAY_MODE unless passed explicitly. Dashboard breaks actual lines at gaps over 5 min.
+- Module 4 in maintenance mode from 2026-11-05: changes only on request.
 - Replay switch: make -C service replay-on|replay-off (Lambda env only, keeps other vars, reruns pipeline). down.sh supports DRY_RUN=1. Demo script: service/DEMO.md.
 - Dashboard accuracy panel reads forecasting/results/accuracy.md; LSTM column stays empty until #18 merges.
 - make -C service deploy now runs test-all first (activate .venv); deploy scripts use set -euo pipefail, except sourced config.sh.
