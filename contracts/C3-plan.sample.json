@@ -3,8 +3,8 @@
   "peak_requests_per_min": 5000,
   "current": {"instances": 1, "instance_type": "t3.micro", "usd_per_hour": 0.0112},
   "options": [
-    {"strategy": "scale_out", "instances": 6, "instance_type": "t3.micro", "usd_per_hour": 0.067, "usd_per_day": 1.61, "expected_latency_ms": 52, "single_point_of_failure": false},
-    {"strategy": "scale_up", "instances": 1, "instance_type": "t3.xlarge", "usd_per_hour": 0.179, "usd_per_day": 4.30, "expected_latency_ms": 47, "single_point_of_failure": true}
+    {"strategy": "scale_out", "instances": 6, "instance_type": "t3.micro", "usd_per_hour": 0.067, "usd_per_day": 1.61, "expected_latency_ms": 52, "single_point_of_failure": false, "memory_constrained": false},
+    {"strategy": "scale_up", "instances": 1, "instance_type": "t3.xlarge", "usd_per_hour": 0.179, "usd_per_day": 4.30, "expected_latency_ms": 47, "single_point_of_failure": true, "memory_constrained": false}
   ],
   "bandwidth_mbps": 4.3,
   "storage_gb_30d": 5.2,
