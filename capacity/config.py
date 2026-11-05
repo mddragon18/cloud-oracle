@@ -56,12 +56,30 @@ DEFAULT_CURRENT_INSTANCE_TYPE = "t3.micro"
 DEFAULT_CURRENT_INSTANCES = 1
 
 # Measured CPU coefficient from real AWS run (Member 1, 2026-11-04):
-# cluster CPU ≈ 2.7% per 100 rpm (replaces provisional ~7.0)
-MEASURED_CPU_PCT_PER_100_RPM = 2.7
+# cluster CPU ≈ 2.7% per 100 rpm (burst credits) — NOT for sustained sizing
+MEASURED_CPU_PCT_PER_100_RPM_BURST = 2.7
+
+# Sustained CPU coefficient (burst credits exhausted, free plan unlimited mode blocked):
+# Nov-5 run: ~8% per 100 rpm once credits are gone. Use this for planning.
+MEASURED_CPU_PCT_PER_100_RPM_SUSTAINED = 8.0
+
+# Default to sustained for conservative planning (credits always run out on free plan)
+MEASURED_CPU_PCT_PER_100_RPM = MEASURED_CPU_PCT_PER_100_RPM_SUSTAINED
 
 # Memory binding limit for t3.micro (real AWS run):
 # OOM at ~620 rpm per instance — RAM is binding constraint, not CPU
 T3_MICRO_OOM_RPM = 620
+
+# Memory binding limits for t3 family (extrapolated from t3.micro 1 GB = 620 rpm).
+# These are provisional until Member 1 provides measured capacity per instance type.
+# Formula: OOM_RPM = 620 * (instance_memory_gb / 1.0)
+T3_OOM_RPM = {
+    "t3.micro": 620,      # 1 GB
+    "t3.small": 1240,     # 2 GB
+    "t3.medium": 2480,    # 4 GB
+    "t3.large": 4960,     # 8 GB
+    "t3.xlarge": 9920,    # 16 GB
+}
 
 # Pricing region settings.
 AWS_REGION_CODE = "ap-south-1"

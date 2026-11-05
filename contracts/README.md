@@ -40,6 +40,9 @@ uncertainty band. `exhaustion_at`: when cpu_pct crosses `cpu_threshold_pct`.
 comparisons; `recommendation` + `reason`: the engine's pick. Prices in these
 samples are **placeholders** — Module 3 fills real ones from the Price List cache.
 
+Each option object includes:
+- `memory_constrained` (bool): `true` when the instance count was increased above the CPU-only calculation because the memory limit of the instance type would be exceeded. For t3 family, OOM RPM limits are: t3.micro=620, t3.small=1240, t3.medium=2480, t3.large=4960, t3.xlarge=9920. A +1 spare server safety margin is applied when memory-constrained.
+
 ## API surface (Module 4)
 
 | Method | Path | Returns |
