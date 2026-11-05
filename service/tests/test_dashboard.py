@@ -70,7 +70,7 @@ def test_demo_shift_countdown_reads_normally():
     assert c2["series"][0]["timestamp"] == "2026-12-15T09:15:00Z" and c2["exhaustion_at"] == "2026-12-15T17:30:00Z"
     assert c3["exhaustion_at"] == c2["exhaustion_at"] and rows[-1]["timestamp"] == "2026-12-15T08:46:00Z"
     assert dash.countdown(c2["exhaustion_at"], 70, now) == ("CPU reaches 70% in 8 h 30 min (17:30 UTC)", "ok")
-    assert src == "sample" and q == {"confidence": "normal", "data_age_minutes": 0}
+    assert src == "sample" and q == {"confidence": "normal", "data_age_minutes": 0, "replay_at": None}
     assert json.loads((REPO / "contracts/C2-forecast.sample.json").read_text())["exhaustion_at"] == "2026-10-25T18:45:00Z"
 
 

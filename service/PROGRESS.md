@@ -7,6 +7,7 @@ COMPLETED:
 - W0: Python 3.11 venv (uv), `make test` green; HANDOFF.md in service/ (branch m4-setup)
 - W1: CI workflow (installs service + forecasting + capacity reqs, `make test`, pytest, ruff non-blocking), PR template, root README, docs/ index (m4-ci)
 - W2: oracle_service package (sample/local/S3 sources, Local/Dynamo stores, pipeline, alerts, API + /metrics/recent), shim, tests (m4-service-core)
+- Decision 2026-11-05: EXCLUDE_WINDOWS drops Nov-5 07:43-07:53Z tuning rows from every source (end exclusive). data/aws-run-2026-11-05-notes.md still says these rows were kept; Member 1 asked on 2026-11-05 to drop them, so that request wins until the notes are updated. Dashboard: https://cloud-oracle-ge5svfjhkafdnfipesqylt.streamlit.app
 - Team decisions 2026-11-04: AGGREGATE_MODE default "raw" (aggregate() kept for /metrics/recent); C2 accuracy fields nullable, model free str; Member 3 storage bug fixed (storage_growth_gb_per_day), test un-skipped
 - W2 finish: stale-metrics warning (data_age_minutes in run summary, >30 min warns), ruff clean, /metrics/recent in contracts/README API table
 - Makefile :8080 -> :8090 comment fix on branch m4-makefile-port (for Member 1)
@@ -36,6 +37,9 @@ KNOWN BUGS (other modules — not fixed here):
 - Member 1: psutil 5.9 has no linux/arm64 wheel; on Apple Silicon build with DOCKER_DEFAULT_PLATFORM=linux/amd64 (and pull nginx:alpine for amd64)
 - Main still has stub forecast(); with raw rows it does not sum across instances (peak 429 for 3x~170 rpm). Expected to change with Member 2's merge.
 AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
+- REPLAY_MODE (default off, also off on Lambda): age, confidence, alert window and countdown use the newest metric row; dashboard shows a replay badge. Turn on: REPLAY_MODE=1 make -C service deploy. Not yet deployed or tried on AWS.
+- make -C service deploy now runs test-all first (activate .venv); deploy scripts use set -euo pipefail, except sourced config.sh.
+- Stray 84,728 rpm plans deleted from DynamoDB 2026-11-05.
 - API URL: https://fsenmc8m46.execute-api.ap-south-1.amazonaws.com  (Streamlit secret ORACLE_API_URL)
 - ECR oracle-service (lifecycle keeps 1; 2 images until expiry runs), DynamoDB oracle-results (3 plans + forecasts + 2 alert docs),
   SNS oracle-alerts (theomeshsengar@gmail.com confirmed), IAM oracle-lambda-role + oracle-scheduler-role,
@@ -45,6 +49,7 @@ AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
 - Verified: smoke.sh 7/7 PASS; pipeline {"source":"sample"} ok; real S3 run ok; /history 3 plans; forced alert sent
 - Redeployed 2026-11-04 14:53Z from main 4cb2c83: smoke.sh 7/7 PASS; /plan/latest + /forecast/latest send X-Oracle-Confidence: low and X-Oracle-Data-Age-Minutes: 78 (stored forecast is naive, newest S3 row ~13:37Z); schedule DISABLED
 - Redeployed 2026-11-05 07:32Z from 67a88f5 (main with #12, #15-#17): smoke.sh 7/7 PASS; real S3 run (20 rows): model naive, peak 1,837 rpm (was 84,728), exhaustion none, plan 3 x t3.micro $0.81/day limited by memory, confidence low, data age 1076 min; schedule DISABLED
+- Redeployed 2026-11-05 11:29Z from cf6699f (S3Source reads all objects, deduped): smoke.sh 7/7 PASS; real S3 run: 461 rows (Nov-4 + Nov-5 steady + Nov-5 sweep; collection final, no 2-day run), model naive, peak 268 rpm, plan 2 x t3.micro $0.54/day, confidence low, data age 11 min; schedule DISABLED
 LESSONS (mistakes not to repeat):
 - zsh: "$VAR:u" is an uppercase modifier; brace ${VAR} before a colon.
 - Lambda base image (AL2, glibc 2.26) has no compiler: pip --only-binary=:all:.
@@ -52,7 +57,7 @@ LESSONS (mistakes not to repeat):
 - GitHub returned intermittent 5xx on push/PR create (2026-11-04): retry, then check for duplicates.
 - Member 1 = mddragon18 (repo admin, wrote Module 1 scaffold) — inferred, confirm with team.
 - Paths may contain spaces: quote "$(ROOT)" in Makefiles.
-- macOS strips DYLD_* through make/bash: a Homebrew aws broken by the system libexpat needs a wrapper on PATH that sets DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib (or brew reinstall).
+- AWS CLI: use ~/.local/bin/aws (2.39.3) with AWS_PROFILE=oracle-m4. The Homebrew aws broke on a libexpat mismatch (2026-11-05) and was uninstalled.
 - Streamlit: don't touch st.secrets without a secrets.toml (renders an error box); embedded browser may hang on localhost websockets, use 127.0.0.1.
 NOTES:
 - Extra dev deps: httpx (FastAPI TestClient); dashboard requirements pulled into requirements-dev for the AppTest smoke test.

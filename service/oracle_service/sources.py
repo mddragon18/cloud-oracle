@@ -1,10 +1,14 @@
 """Metrics readers returning C1 rows (floats for numeric columns, like load_metrics)."""
 import csv
 import io
+import json
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .config import REPO, Config
+from .config import REPO, Config, load
+
+log = logging.getLogger(__name__)
 
 NUMERIC = ("requests_per_min", "avg_latency_ms", "p95_latency_ms", "cpu_pct",
            "mem_pct", "net_in_kb", "net_out_kb", "disk_used_gb")
@@ -28,10 +32,19 @@ def parse_csv(text: str) -> list[dict]:
     return rows
 
 
+def drop_excluded(rows: list[dict], windows: tuple[str, ...]) -> list[dict]:
+    ranges = [tuple(parse_ts(t) for t in w.split("/")) for w in windows]
+    kept = [r for r in rows if not any(a <= parse_ts(r["timestamp"]) < b for a, b in ranges)]
+    log.warning(json.dumps({"event": "rows_excluded", "dropped": len(rows) - len(kept), "kept": len(kept)}))
+    return kept
+
+
 def finish(rows: list[dict], since_hours: float) -> list[dict]:
-    """Dedupe on (timestamp, instance_id), keep the lookback window, sort. Window ends at the newest row."""
+    """Dedupe on (timestamp, instance_id), drop excluded windows, keep the lookback window, sort.
+    The lookback ends at the newest row."""
     uniq = {(r["timestamp"], r["instance_id"]): r for r in rows}
     rows = sorted(uniq.values(), key=lambda r: (r["timestamp"], r["instance_id"]))
+    rows = drop_excluded(rows, load().exclude_windows)
     if rows:
         cutoff = parse_ts(rows[-1]["timestamp"]) - timedelta(hours=since_hours)
         rows = [r for r in rows if parse_ts(r["timestamp"]) >= cutoff]
@@ -57,7 +70,8 @@ class LocalSource:
 
 
 class S3Source:
-    """Collector layout: metrics/{instance}/metrics-{ts}.csv, each upload cumulative -> newest per instance."""
+    """Collector layout: metrics/{instance}/metrics-{ts}.csv. Uploads are cumulative only within a run
+    and each run restarts the collector, so read every object and let finish() dedupe."""
 
     def __init__(self, bucket: str, region: str, client=None):
         if not bucket:
@@ -72,17 +86,16 @@ class S3Source:
         return self._client
 
     def get_rows(self, since_hours: float) -> list[dict]:
-        newest: dict[str, str] = {}
+        keys = []
         for page in self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix="metrics/"):
             for obj in page.get("Contents", []):
                 parts = obj["Key"].split("/")
                 if len(parts) == 3 and parts[2].endswith(".csv"):
-                    # timestamped names sort chronologically
-                    newest[parts[1]] = max(newest.get(parts[1], ""), obj["Key"])
-        if not newest:
+                    keys.append(obj["Key"])
+        if not keys:
             raise NoMetricsError(f"no metrics/<instance>/*.csv objects in s3://{self.bucket}")
         rows = []
-        for key in newest.values():
+        for key in keys:
             body = self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read().decode()
             rows += parse_csv(body)
         return finish(rows, since_hours)

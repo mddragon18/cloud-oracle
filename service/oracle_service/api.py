@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 app = FastAPI(title="oracle-service")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"],
-                   expose_headers=["X-Oracle-Source", "X-Oracle-Confidence", "X-Oracle-Data-Age-Minutes"])
+                   expose_headers=["X-Oracle-Source", "X-Oracle-Confidence", "X-Oracle-Data-Age-Minutes", "X-Oracle-Replay-At"])
 
 
 @app.exception_handler(ContractError)
@@ -45,6 +45,8 @@ def _headers(response: Response, src: str, c2: dict) -> None:
     response.headers["X-Oracle-Confidence"] = q["confidence"]
     if q["data_age_minutes"] is not None:
         response.headers["X-Oracle-Data-Age-Minutes"] = str(q["data_age_minutes"])
+    if q["replay_at"]:
+        response.headers["X-Oracle-Replay-At"] = q["replay_at"]
 
 
 @app.get("/forecast/latest")
