@@ -20,6 +20,7 @@ predict them; ARIMA only widens its uncertainty band there.
 | wikipedia | same-time-yesterday | 32.1 | 32.7 | 4.68 |
 | azure | arima | 9.2 | 10.9 | 1.32 |
 | azure | same-time-yesterday | 5.9 | 7.3 | 0.85 |
+| wikipedia | lstm (Colab run) | 28.6 | 31.4 | 4.10 |
 
 ## Real AWS run, 2026-11-04 (too short for a held-out day: small-sample check only)
 

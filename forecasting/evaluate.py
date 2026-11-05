@@ -78,6 +78,13 @@ def main(step_minutes=15):
         ax.set_ylabel("req/min")
         ax.tick_params(labelsize=7)
         ax.legend(fontsize=7)
+    # LSTM is trained in Colab (no TensorFlow locally); its scores on the same held-out day are saved by hand
+    import glob
+    import json
+    for path in sorted(glob.glob(os.path.join(results_dir, "lstm_*.json"))):
+        with open(path) as fh:
+            r = json.load(fh)
+        lines.append(f"| {r['dataset']} | lstm (Colab run) | {r['mae']:.1f} | {r['rmse']:.1f} | {r['mape_pct']:.2f} |")
     for ax in list(axes.flat)[len(data):]:
         ax.axis("off")
     fig.suptitle("Held-out day: forecast vs actual")
@@ -90,8 +97,9 @@ def main(step_minutes=15):
                 "csv in data/, which is gitignored), then `python -m forecasting.evaluate`.\n\n"
                 "Known limitation: the spike pattern's spikes land at random times, so no model can\n"
                 "predict them; ARIMA only widens its uncertainty band there.\n\n" + table)
-        aws = os.path.join(ROOT, "data", "aws-run.csv")
-        if os.path.exists(aws):
+        # data/aws-run.csv from the loader, or the committed data/aws-run-<date>.csv
+        aws = (sorted(glob.glob(os.path.join(ROOT, "data", "aws-run*.csv"))) or [None])[-1]
+        if aws:
             import pandas as pd
             md = short_run(pd.read_csv(aws))
             if md:
