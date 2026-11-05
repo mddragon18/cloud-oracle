@@ -136,12 +136,13 @@ def option_card_html(o: dict, recommended: bool) -> str:
     name = "Scale out" if o["strategy"] == "scale_out" else "Scale up"
     tag = '<span class="pill">Recommended</span>' if recommended else ""
     spof = "yes" if o["single_point_of_failure"] else "no"
+    memory = "<dt>Sizing</dt><dd>limited by memory</dd>" if o.get("memory_constrained") else ""  # older plans lack the key
     return (f'<div class="opt{" opt-rec" if recommended else ""}"><div class="opt-head"><span class="opt-name">{name}</span>{tag}</div>'
             f'<div class="opt-size">{o["instances"]} × {escape(o["instance_type"])}</div>'
             f'<div class="opt-money"><b>{_usd(o["usd_per_day"])}</b><span class="unit"> /day</span></div>'
             f'<dl><dt>Hourly</dt><dd>{_usd(o["usd_per_hour"], 3)}</dd>'
             f'<dt>Expected latency</dt><dd>{o["expected_latency_ms"]:,.0f} ms</dd>'
-            f'<dt>Single point of failure</dt><dd>{spof}</dd></dl></div>')
+            f'<dt>Single point of failure</dt><dd>{spof}</dd>{memory}</dl></div>')
 
 
 def delta_text(c3: dict) -> str:

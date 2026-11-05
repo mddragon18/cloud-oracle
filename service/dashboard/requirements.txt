@@ -1,4 +1,5 @@
 # Streamlit Community Cloud installs only this file (main file: service/dashboard/app.py, Python 3.11).
+# Keep identical to the root requirements.txt: Streamlit Cloud may install either one.
 # Offline mode imports service/oracle_service/core.py + forecasting/ + capacity/ at load time.
 # No fastapi/boto3/statsmodels/matplotlib: the 2-row contract sample always takes forecast()'s naive path.
 streamlit==1.38.*

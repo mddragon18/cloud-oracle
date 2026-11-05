@@ -1,4 +1,4 @@
-"""Cross-module checks that document other modules' bugs (not fixed here)."""
+"""Cross-module checks between service/ and capacity/."""
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -19,9 +19,15 @@ def rows_two_instances(gb_per_day=1.0, minutes=60):
     return out
 
 
-@pytest.mark.skip(reason="owned by Member 3")
 def test_storage_growth_with_two_instances():
-    # Each instance's disk grows 1 GB/day; baseline() divides by row count (2 per minute) and diffs
-    # first/last rows across different instances (i-1 vs i-2), so it reports ~12.5 instead of ~1 GB/day.
+    # Growth is per instance: the offset between i-1 and i-2 must not read as growth.
     base = engine.run_baseline(rows_two_instances())
-    assert base["storage_gb_per_day"] == pytest.approx(1.0, rel=0.1)
+    assert base["storage_growth_gb_per_day"] == pytest.approx(1.0, rel=0.1)
+
+
+def test_option_card_shows_memory_limit():
+    from service.dashboard.app import option_card_html
+    o = {"strategy": "scale_out", "instances": 3, "instance_type": "t3.micro", "usd_per_day": 0.81, "usd_per_hour": 0.034,
+         "expected_latency_ms": 40.0, "single_point_of_failure": False}
+    assert "limited by memory" not in option_card_html(o, True)
+    assert "limited by memory" in option_card_html({**o, "memory_constrained": True}, True)
