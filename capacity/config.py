@@ -63,6 +63,17 @@ MEASURED_CPU_PCT_PER_100_RPM = 2.7
 # OOM at ~620 rpm per instance — RAM is binding constraint, not CPU
 T3_MICRO_OOM_RPM = 620
 
+# Memory binding limits for t3 family (extrapolated from t3.micro 1 GB = 620 rpm).
+# These are provisional until Member 1 provides measured capacity per instance type.
+# Formula: OOM_RPM = 620 * (instance_memory_gb / 1.0)
+T3_OOM_RPM = {
+    "t3.micro": 620,      # 1 GB
+    "t3.small": 1240,     # 2 GB
+    "t3.medium": 2480,    # 4 GB
+    "t3.large": 4960,     # 8 GB
+    "t3.xlarge": 9920,    # 16 GB
+}
+
 # Pricing region settings.
 AWS_REGION_CODE = "ap-south-1"
 AWS_REGION_NAME = "Asia Pacific (Mumbai)"

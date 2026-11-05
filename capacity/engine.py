@@ -20,16 +20,19 @@ def _apply_memory_constraint(
     peak_rpm: float,
     config_module,
 ) -> tuple[int, bool]:
-    """Apply memory binding constraint for t3.micro.
+    """Apply memory binding constraint for t3 family.
 
     Returns (adjusted_instances, memory_constrained_flag).
+    Applies +1 safety margin when memory-constrained.
     """
-    if instance_type == "t3.micro":
-        oom_rpm = config_module.T3_MICRO_OOM_RPM
+    if instance_type in config_module.T3_OOM_RPM:
+        oom_rpm = config_module.T3_OOM_RPM[instance_type]
         max_rpm = instances * oom_rpm
         if peak_rpm > max_rpm:
             # Need more instances to stay under memory limit
             required = math.ceil(peak_rpm / oom_rpm)
+            # Apply safety margin (+1 spare server) for memory-constrained sizing too
+            required += config_module.SAFETY_MARGIN_INSTANCES
             return required, True
     return instances, False
 
