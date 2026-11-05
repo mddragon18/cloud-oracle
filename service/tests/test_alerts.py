@@ -9,7 +9,7 @@ from service.oracle_service import alerts, config
 from service.oracle_service.config import REPO
 from service.oracle_service.store import LocalStore, iso
 
-NOW = datetime(2026, 11, 4, 12, tzinfo=UTC)
+NOW = datetime.now(UTC).replace(microsecond=0)  # store.since() cuts off from the real clock
 
 
 def c3(ex):
