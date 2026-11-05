@@ -30,3 +30,6 @@ data/forecast/
 data/plan/
 data/alert/
 data/local-metrics/
+
+# Local Claude Code settings
+.claude/

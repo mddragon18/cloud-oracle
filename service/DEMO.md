@@ -10,7 +10,7 @@ Setup for every terminal step: `source .venv/bin/activate`, `export AWS_PROFILE=
 2. `make -C service smoke`: expect 7 PASS lines.
 3. Keep the dashboard open. Streamlit Cloud sleeps when idle, so load it a few minutes early.
 
-`make -C service deploy` resets replay to off. Run `make -C service replay-on` after any deploy.
+`make -C service deploy` keeps the current replay setting. To change it, use `make -C service replay-on` or `replay-off`, or pass `REPLAY_MODE=0` or `1` to the deploy.
 
 ## Click-by-click
 
@@ -21,7 +21,7 @@ Figures below are from the replay run with 431 rows; check them on the day.
 3. Read the headline: **Scale out to 2 × t3.micro**, $0.54/day against $16.32/day to scale up.
 4. Show the runway: no exhaustion in the next 24 h.
 5. Walk the KPI row: peak 268 req/min, recommended $0.54/day, current $0.81/day, bandwidth 21.0 Mbps, storage 2.2 GB.
-6. Scroll to **Forecast vs actual**. Black is recorded data, dashed blue is the forecast. The long diagonal lines join separate runs and are not real traffic.
+6. Scroll to **Forecast vs actual**. Black is recorded data, dashed blue is the forecast. Breaks in the black line are the gaps between runs.
 7. Show the CPU chart with its 70% limit and the memory chart with its 85% limit.
 
 ### 2. Accuracy panel (1 min)

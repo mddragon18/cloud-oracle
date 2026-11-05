@@ -16,12 +16,11 @@ NEWEST = "2026-10-25T10:15:00Z"  # sample's first forecast point minus one step
 LONG_AGO = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def test_off_by_default_here_and_on_lambda(monkeypatch):
+def test_off_by_default(monkeypatch):
     monkeypatch.delenv("REPLAY_MODE", raising=False)
     assert config.load().replay_mode is False
     q = core.quality(C2)
     assert q["replay_at"] is None and q["data_age_minutes"] > 30 and q["confidence"] == "low"
-    assert "REPLAY_MODE=${REPLAY_MODE:-0}" in (REPO / "service/deploy/up.sh").read_text()
 
 
 def test_quality_measures_from_newest_row(monkeypatch):

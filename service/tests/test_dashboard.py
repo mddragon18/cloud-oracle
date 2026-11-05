@@ -119,3 +119,10 @@ def test_accuracy_table_missing_or_unrelated_file_hides_panel(tmp_path):
     assert dash.accuracy_table(tmp_path / "nope.md") == []
     (tmp_path / "x.md").write_text("no table here")
     assert dash.accuracy_table(tmp_path / "x.md") == []
+
+
+def test_break_gaps_only_over_five_minutes():
+    rows = [{"timestamp": f"2026-11-05T10:{m:02d}:00Z", "requests_per_min": 1.0} for m in (0, 5, 11)]
+    out = dash.break_gaps(rows)
+    assert [r["requests_per_min"] for r in out] == [1.0, 1.0, None, 1.0]
+    assert out[2]["timestamp"] == rows[2]["timestamp"]
