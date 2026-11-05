@@ -45,6 +45,7 @@ AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
 - Verified: smoke.sh 7/7 PASS; pipeline {"source":"sample"} ok; real S3 run ok; /history 3 plans; forced alert sent
 - Redeployed 2026-11-04 14:53Z from main 4cb2c83: smoke.sh 7/7 PASS; /plan/latest + /forecast/latest send X-Oracle-Confidence: low and X-Oracle-Data-Age-Minutes: 78 (stored forecast is naive, newest S3 row ~13:37Z); schedule DISABLED
 - Redeployed 2026-11-05 07:32Z from 67a88f5 (main with #12, #15-#17): smoke.sh 7/7 PASS; real S3 run (20 rows): model naive, peak 1,837 rpm (was 84,728), exhaustion none, plan 3 x t3.micro $0.81/day limited by memory, confidence low, data age 1076 min; schedule DISABLED
+- Redeployed 2026-11-05 11:29Z from cf6699f (S3Source reads all objects, deduped): smoke.sh 7/7 PASS; real S3 run: 461 rows (Nov-4 + Nov-5 steady + Nov-5 sweep; collection final, no 2-day run), model naive, peak 268 rpm, plan 2 x t3.micro $0.54/day, confidence low, data age 11 min; schedule DISABLED
 LESSONS (mistakes not to repeat):
 - zsh: "$VAR:u" is an uppercase modifier; brace ${VAR} before a colon.
 - Lambda base image (AL2, glibc 2.26) has no compiler: pip --only-binary=:all:.
