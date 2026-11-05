@@ -53,7 +53,7 @@ LESSONS (mistakes not to repeat):
 - GitHub returned intermittent 5xx on push/PR create (2026-11-04): retry, then check for duplicates.
 - Member 1 = mddragon18 (repo admin, wrote Module 1 scaffold) — inferred, confirm with team.
 - Paths may contain spaces: quote "$(ROOT)" in Makefiles.
-- macOS strips DYLD_* through make/bash: a Homebrew aws broken by the system libexpat needs a wrapper on PATH that sets DYLD_LIBRARY_PATH=/opt/homebrew/opt/expat/lib (or brew reinstall).
+- AWS CLI: use ~/.local/bin/aws (2.39.3) with AWS_PROFILE=oracle-m4. The Homebrew aws broke on a libexpat mismatch (2026-11-05) and was uninstalled.
 - Streamlit: don't touch st.secrets without a secrets.toml (renders an error box); embedded browser may hang on localhost websockets, use 127.0.0.1.
 NOTES:
 - Extra dev deps: httpx (FastAPI TestClient); dashboard requirements pulled into requirements-dev for the AppTest smoke test.
