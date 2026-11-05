@@ -6,6 +6,8 @@ runs out. Runs entirely on the AWS Free plan — the bill must stay at zero.
 
 Architecture: workload → C1 metrics (S3) → `forecast()` → C2 → `plan()` → C3 → service
 (API + schedule + alerts) → dashboard. Diagram and full plan: `Cloud Cost & Capacity Oracle — Team Work Plan.pdf`.
+
+**Live dashboard:** https://cloud-oracle-ge5svfjhkafdnfipesqylt.streamlit.app
 Frozen formats: [`contracts/README.md`](contracts/README.md).
 
 ## Modules

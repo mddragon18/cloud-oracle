@@ -8,6 +8,10 @@ _HERE = Path(__file__).resolve()
 REPO = _HERE.parents[1] if (_HERE.parents[1] / "contracts").is_dir() else _HERE.parents[2]
 
 
+# Comma-separated UTC start/end ranges, end exclusive. Default: Nov-5 load-tuning rows (Member 1).
+DEFAULT_EXCLUDE_WINDOWS = "2026-11-05T07:43:00Z/2026-11-05T07:53:00Z"
+
+
 def _path(value: str) -> Path:
     p = Path(value)
     return p if p.is_absolute() else REPO / p
@@ -27,6 +31,7 @@ class Config:
     aggregate_mode: str
     aws_region: str
     dashboard_url: str
+    exclude_windows: tuple[str, ...]
 
 
 def load() -> Config:
@@ -45,4 +50,5 @@ def load() -> Config:
         aggregate_mode=e("AGGREGATE_MODE", "raw"),
         aws_region=e("AWS_REGION", "ap-south-1"),
         dashboard_url=e("DASHBOARD_URL", ""),
+        exclude_windows=tuple(w.strip() for w in e("EXCLUDE_WINDOWS", DEFAULT_EXCLUDE_WINDOWS).split(",") if w.strip()),
     )

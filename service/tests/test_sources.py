@@ -51,3 +51,13 @@ def test_s3_keeps_every_run_after_collector_restart():
     assert [r["timestamp"] for r in rows] == sorted(r["timestamp"] for r in rows)
     assert {(r["timestamp"][:10], r["instance_id"]) for r in rows} == {
         (d, i) for d in ("2026-11-04", "2026-11-05") for i in ("i-1", "i-2")}
+
+
+def test_exclude_windows_end_exclusive_on_every_source(tmp_path, monkeypatch, caplog):
+    times = ["07:42:00", "07:43:00", "07:52:00", "07:53:00"]
+    (tmp_path / "a.csv").write_text("
+".join([HDR, *[line(f"2026-11-05T{t}Z", "a") for t in times]]))
+    assert [r["timestamp"][11:19] for r in LocalSource(tmp_path).get_rows(168)] == ["07:42:00", "07:53:00"]
+    assert '"dropped": 2' in caplog.text
+    monkeypatch.setenv("EXCLUDE_WINDOWS", "")
+    assert len(LocalSource(tmp_path).get_rows(168)) == 4

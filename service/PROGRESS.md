@@ -7,6 +7,7 @@ COMPLETED:
 - W0: Python 3.11 venv (uv), `make test` green; HANDOFF.md in service/ (branch m4-setup)
 - W1: CI workflow (installs service + forecasting + capacity reqs, `make test`, pytest, ruff non-blocking), PR template, root README, docs/ index (m4-ci)
 - W2: oracle_service package (sample/local/S3 sources, Local/Dynamo stores, pipeline, alerts, API + /metrics/recent), shim, tests (m4-service-core)
+- Decision 2026-11-05: EXCLUDE_WINDOWS drops Nov-5 07:43-07:53Z tuning rows from every source (end exclusive). Dashboard: https://cloud-oracle-ge5svfjhkafdnfipesqylt.streamlit.app
 - Team decisions 2026-11-04: AGGREGATE_MODE default "raw" (aggregate() kept for /metrics/recent); C2 accuracy fields nullable, model free str; Member 3 storage bug fixed (storage_growth_gb_per_day), test un-skipped
 - W2 finish: stale-metrics warning (data_age_minutes in run summary, >30 min warns), ruff clean, /metrics/recent in contracts/README API table
 - Makefile :8080 -> :8090 comment fix on branch m4-makefile-port (for Member 1)
@@ -36,6 +37,7 @@ KNOWN BUGS (other modules — not fixed here):
 - Member 1: psutil 5.9 has no linux/arm64 wheel; on Apple Silicon build with DOCKER_DEFAULT_PLATFORM=linux/amd64 (and pull nginx:alpine for amd64)
 - Main still has stub forecast(); with raw rows it does not sum across instances (peak 429 for 3x~170 rpm). Expected to change with Member 2's merge.
 AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
+- Stray 84,728 rpm plans deleted from DynamoDB 2026-11-05.
 - API URL: https://fsenmc8m46.execute-api.ap-south-1.amazonaws.com  (Streamlit secret ORACLE_API_URL)
 - ECR oracle-service (lifecycle keeps 1; 2 images until expiry runs), DynamoDB oracle-results (3 plans + forecasts + 2 alert docs),
   SNS oracle-alerts (theomeshsengar@gmail.com confirmed), IAM oracle-lambda-role + oracle-scheduler-role,
