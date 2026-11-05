@@ -56,6 +56,10 @@ def low_confidence_text(n_rows: int | None) -> str:
     return f"Low confidence: {rows}, simple model; numbers may be unrealistic"
 
 
+def replay_text(replay_at: str | None) -> str | None:
+    return f"Replay of recorded run ({replay_at[:10]})" if replay_at else None
+
+
 def data_age_text(minutes: int | None) -> str:
     return "data age unknown" if minutes is None else f"newest metrics {duration(minutes)} old"
 
@@ -311,6 +315,10 @@ def main():
         st.info("Demo data: live API not connected yet")
     if quality["confidence"] == "low":
         st.warning(low_confidence_text(len(actual) if not actual.empty else None))
+    replay = replay_text(quality.get("replay_at"))
+    clock = parse(quality["replay_at"]) if replay else now  # "updated N ago" below stays on the wall clock
+    if replay:
+        st.markdown(f'<span class="pill">{replay}</span>', unsafe_allow_html=True)
     dot = "low" if quality["confidence"] == "low" else ("live" if src == "live" else "")
     st.markdown(f'<div class="status"><span class="dot {dot}"></span>'
                 f'{"Sample data" if src == "sample" else "Live"} · {age_text(c3.get("generated_at"), now)} · '
@@ -320,9 +328,9 @@ def main():
                 unsafe_allow_html=True)
 
     # 2. the finding (countdown) and the capacity runway
-    text, level = countdown(c2.get("exhaustion_at"), c2.get("cpu_threshold_pct", 70), now)
+    text, level = countdown(c2.get("exhaustion_at"), c2.get("cpu_threshold_pct", 70), clock)
     {"ok": st.success, "warning": st.warning, "critical": st.error}[level](text)
-    st.markdown('<div class="summary">' + runway_html(c2.get("exhaustion_at"), c2.get("horizon_minutes", 1440), now,
+    st.markdown('<div class="summary">' + runway_html(c2.get("exhaustion_at"), c2.get("horizon_minutes", 1440), clock,
                 c2.get("cpu_threshold_pct", 70)) + kpi_html(c3) + "</div>", unsafe_allow_html=True)
 
     # 3. forecast vs actual: forecast in the one hue, actual in ink, one y-axis per chart

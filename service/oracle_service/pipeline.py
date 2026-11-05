@@ -18,7 +18,9 @@ def run_once(cfg: config.Config | None = None, force_alert: bool = False) -> dic
     t0 = time.monotonic()
     try:
         rows = get_source(cfg).get_rows(cfg.lookback_hours)
-        age = round((datetime.now(UTC) - parse_ts(rows[-1]["timestamp"])).total_seconds() / 60)
+        newest = parse_ts(rows[-1]["timestamp"])
+        now = newest if cfg.replay_mode else datetime.now(UTC)  # replay: the recorded run's own clock
+        age = round((now - newest).total_seconds() / 60)
         if age > STALE_MIN:  # lookback is measured from the newest row, so stale data looks "current"
             log.warning(json.dumps({"event": "stale_metrics", "data_age_minutes": age}))
         c2 = engine.run_forecast(engine.aggregate(rows, cfg.aggregate_mode))
@@ -26,7 +28,7 @@ def run_once(cfg: config.Config | None = None, force_alert: bool = False) -> dic
         store = get_store(cfg)
         store.put("forecast", c2)
         store.put("plan", c3)
-        alert = alerts.check(c3, store, cfg, force=force_alert, c2=c2, data_age_minutes=age)
+        alert = alerts.check(c3, store, cfg, now=now, force=force_alert, c2=c2, data_age_minutes=age)
     except Exception:
         log.exception(json.dumps({"event": "pipeline_failed", "ms": round((time.monotonic() - t0) * 1000)}))
         raise

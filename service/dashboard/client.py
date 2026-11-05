@@ -80,12 +80,13 @@ class Client:
             raise ApiError(f"offline mode failed: {str(e)[:200]}") from e
 
     def forecast(self) -> tuple[dict, str, dict]:
-        """-> (C2, 'live'|'sample', {"confidence": "low"|"normal", "data_age_minutes": int|None})."""
+        """-> (C2, 'live'|'sample', {"confidence": "low"|"normal", "data_age_minutes": int|None, "replay_at": str|None})."""
         if self.base_url:
             doc, h = self._http("GET", "/forecast/latest")
             age = h.get("X-Oracle-Data-Age-Minutes")
             return doc, h.get("X-Oracle-Source", "live"), {
-                "confidence": h.get("X-Oracle-Confidence", "normal"), "data_age_minutes": int(age) if age else None}
+                "confidence": h.get("X-Oracle-Confidence", "normal"), "data_age_minutes": int(age) if age else None,
+                "replay_at": h.get("X-Oracle-Replay-At")}
         doc, src = self._offline(lambda a: a.latest, "forecast")
         doc = self._demo(doc, src)
         return doc, src, self._offline(lambda a: a.quality, doc, self.now)
