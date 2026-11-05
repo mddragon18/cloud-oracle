@@ -14,6 +14,26 @@ from capacity import config, pricing, sizing
 from capacity.baseline import baseline
 
 
+def _apply_memory_constraint(
+    instance_type: str,
+    instances: int,
+    peak_rpm: float,
+    config_module,
+) -> tuple[int, bool]:
+    """Apply memory binding constraint for t3.micro.
+
+    Returns (adjusted_instances, memory_constrained_flag).
+    """
+    if instance_type == "t3.micro":
+        oom_rpm = config_module.T3_MICRO_OOM_RPM
+        max_rpm = instances * oom_rpm
+        if peak_rpm > max_rpm:
+            # Need more instances to stay under memory limit
+            required = math.ceil(peak_rpm / oom_rpm)
+            return required, True
+    return instances, False
+
+
 def plan_for_rpm(
     forecast: dict,
     baseline_result: dict,
@@ -103,8 +123,9 @@ def plan(
 
     # Baseline CPU coefficient
     cpu_coeff = baseline.get("cpu_pct_per_100_rpm")
+    # Use measured coefficient from real AWS run if baseline doesn't have it
     if cpu_coeff is None:
-        raise ValueError("baseline result missing 'cpu_pct_per_100_rpm'")
+        cpu_coeff = config.MEASURED_CPU_PCT_PER_100_RPM
     cpu_coeff_f = float(cpu_coeff)
     if not math.isfinite(cpu_coeff_f) or cpu_coeff_f <= 0:
         raise ValueError(f"Baseline CPU coefficient must be positive and finite: {cpu_coeff_f}")
@@ -141,6 +162,10 @@ def plan(
     # Scale-out: same instance type
     scale_out_type = current_type
     scale_out_instances = max(instances_required, 1)
+    # Apply memory constraint for scale-out
+    scale_out_instances, scale_out_memory_constrained = _apply_memory_constraint(
+        scale_out_type, scale_out_instances, peak_requests_per_min, config
+    )
     try:
         scale_out_price = pricing.get_price(scale_out_type, prices)
     except Exception as exc:
@@ -191,6 +216,11 @@ def plan(
             capacity_per_instance_rpm=scaled_capacity,
         )
         scale_up_instances = max(scale_up_instances, 1)
+
+    # Apply memory constraint for scale-up
+    scale_up_instances, scale_up_memory_constrained = _apply_memory_constraint(
+        scale_up_type, scale_up_instances, peak_requests_per_min, config
+    )
 
     # If scale_up_instances is same as scale_out, we still present it but note limitations
     # Ensure scale-up has a price
@@ -343,6 +373,7 @@ def plan(
                 "usd_per_day": float(scale_out_daily),
                 "expected_latency_ms": float(round(scale_out_latency, 2)),
                 "single_point_of_failure": bool(scale_out_spof),
+                "memory_constrained": bool(scale_out_memory_constrained),
             },
             {
                 "strategy": "scale_up",
@@ -352,6 +383,7 @@ def plan(
                 "usd_per_day": float(scale_up_daily),
                 "expected_latency_ms": float(round(scale_up_latency, 2)),
                 "single_point_of_failure": bool(scale_up_spof),
+                "memory_constrained": bool(scale_up_memory_constrained),
             },
         ],
         "bandwidth_mbps": float(round(bandwidth_mbps, 2)),
