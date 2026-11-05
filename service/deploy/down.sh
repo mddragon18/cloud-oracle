@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Delete Module 4 AWS resources in reverse order. --keep-data keeps the DynamoDB table and SNS topic.
 # Never touches the metrics bucket (Member 1's).
-set -uo pipefail
+set -euo pipefail
 cd "$(dirname "$0")/../.."
 source service/deploy/config.sh
 check_account
@@ -10,7 +10,7 @@ gone() { "$@" >/dev/null 2>&1 && echo "deleted: ${*: -1}" || echo "absent:  ${*:
 
 log "schedule first"
 gone aws scheduler delete-schedule --name "$SCHEDULE"
-aws iam delete-role-policy --role-name "$SCHEDULER_ROLE" --policy-name invoke-pipeline >/dev/null 2>&1
+aws iam delete-role-policy --role-name "$SCHEDULER_ROLE" --policy-name invoke-pipeline >/dev/null 2>&1 || true  # absent is fine
 gone aws iam delete-role --role-name "$SCHEDULER_ROLE"
 
 log "API Gateway"
@@ -24,8 +24,8 @@ for fn in "$API_FN" "$PIPELINE_FN"; do
 done
 
 log "IAM lambda role"
-aws iam detach-role-policy --role-name "$LAMBDA_ROLE" --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole >/dev/null 2>&1
-aws iam delete-role-policy --role-name "$LAMBDA_ROLE" --policy-name oracle-least-privilege >/dev/null 2>&1
+aws iam detach-role-policy --role-name "$LAMBDA_ROLE" --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole >/dev/null 2>&1 || true
+aws iam delete-role-policy --role-name "$LAMBDA_ROLE" --policy-name oracle-least-privilege >/dev/null 2>&1 || true
 gone aws iam delete-role --role-name "$LAMBDA_ROLE"
 
 if [ "$KEEP_DATA" = 0 ]; then

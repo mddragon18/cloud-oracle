@@ -36,7 +36,8 @@ def is_duplicate(store, exhaustion_at: str | None, now: datetime) -> bool:
     if exhaustion_at is None:
         return False
     ex = parse_ts(exhaustion_at)
-    for a in store.since("alert", 1):
+    days = max(1, (datetime.now(UTC) - now).days + 1)  # since() counts from the wall clock; replay `now` is in the past
+    for a in store.since("alert", days):
         if (a.get("exhaustion_at") and abs(parse_ts(a["exhaustion_at"]) - ex) <= SAME_EXHAUSTION
                 and now - parse_ts(a["generated_at"]) <= RESEND_AFTER):
             return True

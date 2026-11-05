@@ -32,6 +32,7 @@ class Config:
     aws_region: str
     dashboard_url: str
     exclude_windows: tuple[str, ...]
+    replay_mode: bool
 
 
 def load() -> Config:
@@ -51,4 +52,5 @@ def load() -> Config:
         aws_region=e("AWS_REGION", "ap-south-1"),
         dashboard_url=e("DASHBOARD_URL", ""),
         exclude_windows=tuple(w.strip() for w in e("EXCLUDE_WINDOWS", DEFAULT_EXCLUDE_WINDOWS).split(",") if w.strip()),
+        replay_mode=e("REPLAY_MODE", "0").lower() in ("1", "true", "on"),
     )
