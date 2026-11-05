@@ -22,7 +22,7 @@ assert any("Demo data: live API not connected yet" in i.value for i in at.info)
 assert not any("Low confidence" in w.value for w in at.warning), "demo data should read as current, no banner"
 md = " ".join(m.value for m in at.markdown)
 sub = " ".join(s.value for s in at.subheader)
-for panel in ("Forecast vs actual", "Options for peak", "What-if", "History (7 days)"):
+for panel in ("Forecast vs actual", "Model accuracy (offline evaluation)", "Options for peak", "What-if", "History (7 days)"):
     assert panel in sub, f"missing panel {panel!r}"
 assert "Scale out to 6 × t3.micro" in md and "Recommended" in md
 assert len(at.get("plotly_chart")) >= 3, "expected rpm, CPU and memory charts"
