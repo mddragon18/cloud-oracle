@@ -8,10 +8,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from client import ApiError, Client
 
-# Achromatic ledger (taste-skill app sheet): ink chrome; the one chart hue sits on the forecast, the main data element.
-INK, MUTED, GRID, HUE, HUE_BAND = "#141414", "#6b6b6b", "#eef0f3", "#1d5fbf", "rgba(29,95,191,0.12)"
+# Console palette, light values. Plotly can't read CSS variables, so CSS repaints these exact colours in dark mode.
+INK, MUTED, GRID, HUE, HUE_BAND = "#17130f", "#4f4a41", "#ddd9cf", "#0f4fa8", "rgba(15,79,168,0.16)"
+BASELINE, LIMIT = "#8a8478", "#5c564c"
 ACCURACY_MD = Path(__file__).resolve().parents[2] / "forecasting" / "results" / "accuracy.md"
-ACCURACY_MODELS = (("arima", "ARIMA", HUE), ("lstm", "LSTM", INK), ("same-time-yesterday", "Same time yesterday", "#a3a3a3"))
+ACCURACY_MODELS = (("arima", "ARIMA", HUE), ("lstm", "LSTM", INK), ("same-time-yesterday", "Same time yesterday", BASELINE))
 ACCURACY_CAPTION = ("Live data covers ~1 h runs, so the live forecast uses the short-history mode; "
                     "24 h accuracy is measured on Wikipedia and Azure traces.")
 MEM_LIMIT_PCT = 85  # Member 1's AWS run: RAM, not CPU, binds on t3.micro (~620 rpm); dashboard-only marker
@@ -194,98 +195,15 @@ def delta_text(c3: dict) -> str:
             f"{c3['current']['instance_type']}).")
 
 
-CSS = """
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&display=swap" rel="stylesheet">
-<style>
-:root { --ground:#f2f4f7; --surface:#fff; --raised:#eeeeee; --border:#e6e6e6; --text:#0a0a0a; --muted:#6b6b6b;
-  --accent:#141414; --hue:#1d5fbf; --negative:#c4242a; --warning:#92400e; --radius-card:8px; --radius-control:6px; }
-.stApp, .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp div, .stApp span:not([data-testid="stIconMaterial"]),
-.stApp button, .stApp input, .stApp label { font-family: "Geist", Inter, system-ui, sans-serif !important; }
-.stApp { background: var(--ground); }
-[data-testid="stHeader"] { background: transparent; height: 0; }
-[data-testid="stToolbar"], [data-testid="stDecoration"], footer, #MainMenu { display: none !important; }
-.block-container { max-width: 1180px; padding: 20px 24px 64px; }
-[data-testid="stVerticalBlock"] { gap: 12px; }
-/* cards: white sheet, 1px edge, no shadow */
-/* Streamlit's bordered containers default to text colour at 20% alpha; use the whisper token instead.
-   Unbordered wrappers have a 0px border, so the colour only shows where Streamlit draws one. */
-[data-testid="stVerticalBlockBorderWrapper"] { border-color: var(--border) !important; border-radius: var(--radius-card); }
-/* white only on the innermost wrapper around a chart (the bordered card), never on the page's outer wrappers */
-[data-testid="stVerticalBlockBorderWrapper"]:has([data-testid="stPlotlyChart"]):not(:has([data-testid="stVerticalBlockBorderWrapper"])) {
-  background: var(--surface); }
-[data-testid="stForm"] { background: var(--surface); border: 1px solid var(--border) !important;
-  border-radius: var(--radius-card); box-shadow: none; }
-[data-testid="stForm"] { padding: 16px 20px; }
-h1, h2, h3 { letter-spacing: -0.01em; color: var(--text); }
-.stApp h1 { font-size: 28px; font-weight: 600; line-height: 1.2; padding: 0; margin: 0; }
-.stApp h3 { font-size: 16px !important; font-weight: 500 !important; padding: 20px 0 2px !important; }
-p, li, .stMarkdown { font-size: 14px; }
-[data-testid="stCaptionContainer"] { color: var(--muted); font-size: 13px; }
-/* buttons: near-black primary, grey secondary, 6px radius */
-.stButton button, [data-testid="stFormSubmitButton"] button, [data-testid="stPopover"] button {
-  border-radius: var(--radius-control); min-height: 36px; font-weight: 500; box-shadow: none; }
-[data-testid="stFormSubmitButton"] button { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
-[data-testid="stFormSubmitButton"] button:hover { background: #333; border-color: #333; color: #fff; }
-.stButton button, [data-testid="stPopover"] button { background: #e5e5e5; border: 1px solid #e5e5e5; color: var(--text); }
-.stButton button:hover, [data-testid="stPopover"] button:hover { background: #d9d9d9; border-color: #d9d9d9; color: var(--text); }
-button:focus-visible { outline: 2px solid var(--hue) !important; outline-offset: 2px; }
-/* alerts: flat lines with a status dot, no icon tiles */
-[data-testid="stAlert"] > div { border-radius: var(--radius-control); padding: 10px 14px; border: 0; }
-[data-testid="stAlert"] [data-testid="stAlertContentInfo"], [data-testid="stAlert"] [data-testid="stAlertContentSuccess"],
-[data-testid="stAlert"] [data-testid="stAlertContentWarning"], [data-testid="stAlert"] [data-testid="stAlertContentError"] { font-size: 14px; }
-[data-testid="stAlertDynamicIcon"], [data-testid="stAlert"] svg { display: none; }
-div[role="alert"]:has([data-testid="stAlertContentInfo"]) { background: #e8ebf0; color: #3d3d3d; }
-div[role="alert"]:has([data-testid="stAlertContentSuccess"]) { background: #e6f4ea; color: #04250e; }
-div[role="alert"]:has([data-testid="stAlertContentWarning"]) { background: #fff4db; color: #6b3a0a; }
-div[role="alert"]:has([data-testid="stAlertContentError"]) { background: #ffedea; color: #831c1e; }
-/* top bar */
-.bar { display:flex; align-items:center; gap:10px; min-height:40px; }
-.bar .name { font-size:15px; font-weight:600; }
-.bar .scope { font-size:13px; color:var(--muted); }
-.dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:1px; background:#8a8a8a; }
-.dot.live { background:#2e7d32; } .dot.low { background:#d97706; }
-.status { font-size:13px; color:var(--muted); }
-.reason { font-size:15px; color:#3d3d3d; margin-top:6px; max-width:760px; }
-/* KPI strip */
-.summary { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-card); overflow:hidden; }
-.kpis { display:grid; grid-template-columns:repeat(5, 1fr); border-top:1px solid var(--border); }
-.kpi { padding:14px 18px; border-left:1px solid var(--border); } .kpi:first-child { border-left:0; }
-.kpi-label { font-size:13px; font-weight:500; color:var(--muted); }
-.kpi-value { font-size:24px; font-weight:400; margin-top:4px; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.kpi-value b { font-weight:700; } .unit { font-size:13px; color:var(--muted); font-weight:400; }
-/* capacity runway */
-.runway { padding:16px 18px 10px; }
-.runway .track { position:relative; height:10px; background:#e9ecf1; border-radius:5px; }
-.runway .fill { position:absolute; inset:0 auto 0 0; background:var(--hue); border-radius:5px; opacity:.85; }
-.runway .mark { position:absolute; top:-5px; width:2px; height:20px; background:var(--negative); transform:translateX(-1px); }
-.runway-scale { position:relative; display:flex; justify-content:space-between; font-size:12px; color:var(--muted);
-  margin-top:8px; height:16px; font-variant-numeric:tabular-nums; }
-.runway-scale .mark-label { position:absolute; transform:translateX(-50%); color:var(--negative); white-space:nowrap; }
-/* option cards */
-.opts { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.opt { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-card); padding:18px 20px; }
-.opt-rec { border:1px solid var(--accent); }
-.opt-head { display:flex; justify-content:space-between; align-items:center; }
-.opt-name { font-size:16px; font-weight:500; }
-.pill { font-size:12px; font-weight:500; background:var(--accent); color:#fff; border-radius:999px; padding:3px 10px; }
-.opt-size { font-size:14px; color:var(--muted); margin-top:2px; }
-.opt-money { font-size:30px; margin:10px 0 8px; font-variant-numeric:tabular-nums; } .opt-money b { font-weight:700; }
-.opt dl { display:grid; grid-template-columns:1fr auto; gap:6px 12px; margin:0; font-size:14px; }
-.stApp .opt dt { color:var(--muted); font-weight:400; margin:0; padding:0; }
-.stApp .opt dd { margin:0; padding:0; text-align:right; font-variant-numeric:tabular-nums; }
-.foot { font-size:13px; color:var(--muted); }
-@media (max-width: 760px) {
-  .kpis { grid-template-columns:1fr 1fr; } .kpi { border-left:0; border-top:1px solid var(--border); }
-  .kpi:nth-child(-n+2) { border-top:0; } .kpi:last-child { grid-column:span 2; } .opts { grid-template-columns:1fr; } .stApp h1 { font-size:24px; }
-}
-@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
-</style>
-"""
+FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+         '<link href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400;500;600'
+         '&family=Atkinson+Hyperlegible+Mono:wght@400;500;600&display=swap" rel="stylesheet">')
+# st.markdown ends a style block at a blank line, so the stylesheet must stay free of them
+CSS = f'{FONTS}<style>{Path(__file__).with_name("style.css").read_text()}</style>'
 
-MARK_SVG = ('<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 15a8 8 0 0 1 16 0" fill="none" '
-            'stroke="#141414" stroke-width="2.2" stroke-linecap="round"/><path d="M11 15l4.5-5" stroke="#1d5fbf" '
-            'stroke-width="2.2" stroke-linecap="round"/><circle cx="11" cy="15" r="1.8" fill="#141414"/></svg>')
+MARK_SVG = ('<svg class="mark" width="24" height="24" viewBox="0 0 22 22" aria-hidden="true"><path class="m-ink" d="M3 15a8 8 0 0 1 16 0" '
+            'stroke-width="2.2" stroke-linecap="round"/><path class="m-cool" d="M11 15l4.5-5" '
+            'stroke-width="2.2" stroke-linecap="round"/><circle class="m-dot" cx="11" cy="15" r="1.8"/></svg>')
 
 
 # ---------- rendering ----------
@@ -354,7 +272,7 @@ def main():
     replay = replay_text(quality.get("replay_at"))
     clock = parse(quality["replay_at"]) if replay else now  # "updated N ago" below stays on the wall clock
     if replay:
-        st.markdown(f'<span class="pill">{replay}</span>', unsafe_allow_html=True)
+        st.markdown(f'<span class="pill notice">{replay}</span>', unsafe_allow_html=True)
     dot = "low" if quality["confidence"] == "low" else ("live" if src == "live" else "")
     st.markdown(f'<div class="status"><span class="dot {dot}"></span>'
                 f'{"Sample data" if src == "sample" else "Live"} · {age_text(c3.get("generated_at"), now)} · '
@@ -377,10 +295,10 @@ def main():
 
     def style(fig, height: int, label: str):
         fig.update_layout(height=height, margin={"l": 56, "r": 16, "t": 28, "b": 36}, hovermode="x unified",
-                          paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
-                          font={"family": "Geist, Inter, system-ui, sans-serif", "size": 12, "color": MUTED},
+                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                          font={"family": "Host Grotesk, system-ui, sans-serif", "size": 14, "color": MUTED},
                           legend={"orientation": "h", "y": 1.02, "x": 1, "xanchor": "right", "yanchor": "bottom",
-                                  "font": {"color": INK}},
+                                  "font": {"color": INK, "size": 14}},
                           yaxis={"title": {"text": label, "standoff": 8}, "gridcolor": GRID, "zeroline": False,
                                  "automargin": True},
                           xaxis={"gridcolor": GRID, "showline": False, "automargin": True})
@@ -395,12 +313,12 @@ def main():
             rows = break_gaps(actual.to_dict("records"))
             fig.add_trace(go.Scatter(x=[r["timestamp"] for r in rows], y=[r[col] for r in rows], name="actual",
                                      mode="lines+markers", marker={"size": 3, "color": INK},  # lone rows stay visible
-                                     line={"color": INK, "width": 2}))
+                                     line={"color": INK, "width": 2.5}))
         few = len(fc) < 3
         fig.add_trace(go.Scatter(x=fc.timestamp, y=fc[col], name="forecast", mode="lines+markers" if few else "lines",
-                                 line={"color": HUE, "width": 2, "dash": "dash"}, marker={"size": 9, "color": HUE}))
+                                 line={"color": HUE, "width": 3, "dash": "dash"}, marker={"size": 9, "color": HUE}))
         if threshold is not None:
-            fig.add_hline(y=threshold, line={"color": "#8a8a8a", "width": 1, "dash": "dash"},
+            fig.add_hline(y=threshold, line={"color": LIMIT, "width": 1.5, "dash": "dash"},
                           annotation_text=f"{threshold:g}% limit", annotation_font_color=MUTED)
         style(fig, height, label)
         with st.container(border=True):
