@@ -90,6 +90,16 @@ def test_loaders():
     assert len(az) == 2880
     assert az["requests_per_min"].iloc[0] == 500 and az["requests_per_min"].iloc[-1] == 1000
 
+    from forecasting.loaders import aws_run
+    from forecasting.synthetic import generate
+    sample = generate("steady", days=1).head(10)
+    with tempfile.TemporaryDirectory() as d:  # collector re-uploads its growing csv: files overlap
+        os.makedirs(os.path.join(d, "i-01"))
+        sample.head(5).to_csv(os.path.join(d, "i-01", "metrics-1.csv"), index=False)
+        sample.to_csv(os.path.join(d, "i-01", "metrics-2.csv"), index=False)
+        run = aws_run(d)
+    assert len(run) == 10 and run["timestamp"].is_monotonic_increasing
+
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

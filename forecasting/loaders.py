@@ -57,20 +57,42 @@ def azure_functions(trace_dir, trigger="http", function=None, start="2026-10-01T
     if not files:
         raise FileNotFoundError(f"no invocations_per_function_md.anon.d*.csv in {trace_dir}")
     minute_cols = [str(m) for m in range(1, 1441)]
-    days = []
-    for f in files:
-        d = pd.read_csv(f)
-        d = d[d["Trigger"] == trigger] if function is None else d
-        days.append(d.set_index("HashFunction")[minute_cols])
     if function is None:
-        common = set(days[0].index).intersection(*(set(d.index) for d in days[1:]))
+        # pass 1, id columns only: `trigger` functions present on every day (each day file is ~135 MB)
+        common = None
+        for f in files:
+            ids = pd.read_csv(f, usecols=["HashFunction", "Trigger"])
+            found = set(ids.loc[ids["Trigger"] == trigger, "HashFunction"])
+            common = found if common is None else common & found
         if not common:
             raise ValueError(f"no {trigger!r} function present in all {len(files)} day files")
-        function = days[0].loc[list(common)].sum(axis=1).idxmax()
-    # duplicate hashes across owners are possible; sum them as one function
-    values = pd.concat([d.loc[[function]].sum(axis=0) for d in days]).to_numpy(dtype=float)
+        day1 = pd.read_csv(files[0])
+        day1 = day1[day1["HashFunction"].isin(common)]
+        function = day1.groupby("HashFunction")[minute_cols].sum().sum(axis=1).idxmax()
+    # pass 2: keep only that function's rows, a chunk at a time.
+    # Duplicate hashes across owners are possible; sum them as one function.
+    per_day = []
+    for f in files:
+        rows = pd.concat(c[c["HashFunction"] == function] for c in pd.read_csv(f, chunksize=10000))
+        if rows.empty:
+            raise ValueError(f"function {function!r} missing from {os.path.basename(f)}")
+        per_day.append(rows[minute_cols].sum(axis=0))
+    values = pd.concat(per_day).to_numpy(dtype=float)
     idx = pd.date_range(start, periods=len(values), freq="min")
     return c1_from_rpm(_scale(pd.Series(values, index=idx), peak_rpm), "azure-functions")
+
+
+def aws_run(sync_dir):
+    """C1 DataFrame from an `aws s3 sync` of the metrics/ prefix.
+
+    The collector re-uploads its whole growing csv every 5 min, so files overlap:
+    concatenate, drop duplicate rows, sort.
+    """
+    files = glob.glob(os.path.join(sync_dir, "**", "*.csv"), recursive=True)
+    if not files:
+        raise FileNotFoundError(f"no csv files under {sync_dir}")
+    df = pd.concat(pd.read_csv(f) for f in files).drop_duplicates()
+    return df.sort_values(["timestamp", "instance_id"]).reset_index(drop=True)
 
 
 if __name__ == "__main__":
@@ -83,8 +105,15 @@ if __name__ == "__main__":
     w.add_argument("--end", default="20261014")
     a = sub.add_parser("azure")
     a.add_argument("trace_dir")
+    s3 = sub.add_parser("aws-run", help="dir from: aws s3 sync s3://<bucket>/metrics/ <dir>")
+    s3.add_argument("sync_dir")
     args = p.parse_args()
-    df = wikipedia(start=args.start, end=args.end) if args.src == "wikipedia" else azure_functions(args.trace_dir)
+    if args.src == "wikipedia":
+        df = wikipedia(start=args.start, end=args.end)
+    elif args.src == "azure":
+        df = azure_functions(args.trace_dir)
+    else:
+        df = aws_run(args.sync_dir)
     out = os.path.join(here, "data", f"{args.src}.csv")
     df.to_csv(out, index=False)
     print(f"wrote {out} ({len(df)} rows)")

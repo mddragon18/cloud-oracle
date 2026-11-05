@@ -28,6 +28,34 @@ def datasets():
     return out
 
 
+def short_run(df, test_minutes=5):
+    """Real runs too short for a held-out day: take the last unbroken stretch of minutes,
+    run forecast() on all but its last `test_minutes`, compare with those minutes. Returns markdown."""
+    from forecasting.forecast import _iso, forecast
+    rows = df.to_dict("records")
+    points = _per_minute(rows)
+    start = 0
+    for i in range(1, len(points)):
+        if (points[i][0] - points[i - 1][0]).total_seconds() > 60:
+            start = i  # gap: the unbroken stretch restarts here
+    block = points[start:]
+    if len(block) <= test_minutes + 1:
+        return None
+    first, cut, last = _iso(block[0][0]), _iso(block[-test_minutes][0]), _iso(block[-1][0])
+    fc = forecast([r for r in rows if first <= r["timestamp"] < cut])
+    level = fc["series"][0]["requests_per_min"]
+    actual = [p[1] for p in block[-test_minutes:]]
+    e = errors(actual, [level] * test_minutes)
+    full = forecast(rows)
+    peak = max(s["requests_per_min"] for s in full["series"])
+    return (f"Unbroken stretch {first} .. {last} ({len(block)} min). `forecast()` on the first "
+            f"{len(block) - test_minutes} min gives model `{fc['model']}`, level {level} req/min. Against the "
+            f"last {test_minutes} min (actual {min(actual):.0f}-{max(actual):.0f}): MAE {e['mae']:.1f}, "
+            f"MAPE {e['mape_pct']:.2f}%.\n\n"
+            f"Whole run ({len(rows)} rows, gaps included) gives model `{full['model']}`, 24 h peak {peak} "
+            f"req/min (observed per-minute max {max(p[1] for p in points):.0f}).\n")
+
+
 def main(step_minutes=15):
     period = 1440 // step_minutes
     results_dir = os.path.join(HERE, "results")
@@ -62,6 +90,15 @@ def main(step_minutes=15):
                 "csv in data/, which is gitignored), then `python -m forecasting.evaluate`.\n\n"
                 "Known limitation: the spike pattern's spikes land at random times, so no model can\n"
                 "predict them; ARIMA only widens its uncertainty band there.\n\n" + table)
+        aws = os.path.join(ROOT, "data", "aws-run.csv")
+        if os.path.exists(aws):
+            import pandas as pd
+            md = short_run(pd.read_csv(aws))
+            if md:
+                f.write("\n## Real AWS run, 2026-11-04 (too short for a held-out day: small-sample check only)\n\n"
+                        "Data: `aws s3 sync s3://<bucket>/metrics/ <dir>`, then "
+                        "`python -m forecasting.loaders aws-run <dir>`.\n\n" + md)
+                print(md)
     print(table)
 
 
