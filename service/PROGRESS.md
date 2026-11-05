@@ -1,8 +1,8 @@
 # Module 4 progress
-Last updated: 2026-11-04 by Claude (agent)
+Last updated: 2026-11-04 (redeploy) by Claude (agent)
 
 COMPLETED:
-- m4-alert-guards: alerts skip stale (>30 min) and low-confidence forecasts (unless forced), 0..window only, one de-duped "capacity already exceeded" alert when fresh; X-Oracle-Confidence / X-Oracle-Data-Age-Minutes headers; dashboard amber banner + data age. NOT deployed (waiting for Member 2's fix)
+- m4-alert-guards: alerts skip stale (>30 min) and low-confidence forecasts (unless forced), 0..window only, one de-duped "capacity already exceeded" alert when fresh; X-Oracle-Confidence / X-Oracle-Data-Age-Minutes headers; dashboard amber banner + data age. Deployed 2026-11-04 14:53Z (image 4cb2c83, main after #9 + #11)
 - W4 deployed 2026-11-04 (draft PR #9 -> ready); W5 prep PR #10 merged; dashboard memory % chart (85% line) next to CPU
 - W0: Python 3.11 venv (uv), `make test` green; HANDOFF.md in service/ (branch m4-setup)
 - W1: CI workflow (installs service + forecasting + capacity reqs, `make test`, pytest, ruff non-blocking), PR template, root README, docs/ index (m4-ci)
@@ -19,7 +19,6 @@ NEXT:
 - Get #2 -> #3 -> #4 -> #6 reviewed and merged in order
 - Re-run Docker acceptance after Member 1 fixes issue #7
 - W3: dashboard screenshots into docs/img/ once real data flows
-- Redeploy m4-alert-guards only after Member 2's naive-forecast fix (human decides); schedule stays DISABLED
 - W5: Streamlit Cloud app + ORACLE_API_URL secret; schedule-on only in integration/demo windows
 NEEDS TEAM DECISION:
 - Q2 METRICS_BUCKET name + confirm cumulative uploads (Member 1)
@@ -52,6 +51,7 @@ AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
 - Schedule oracle-pipeline-15min: DISABLED (no tags possible; down.sh deletes it by name)
 - No reserved concurrency (account limit 10); API throttling is the guard
 - Verified: smoke.sh 7/7 PASS; pipeline {"source":"sample"} ok; real S3 run ok; /history 3 plans; forced alert sent
+- Redeployed 2026-11-04 14:53Z from main 4cb2c83: smoke.sh 7/7 PASS; /plan/latest + /forecast/latest send X-Oracle-Confidence: low and X-Oracle-Data-Age-Minutes: 78 (stored forecast is naive, newest S3 row ~13:37Z); schedule DISABLED
 LESSONS (mistakes not to repeat):
 - zsh: "$VAR:u" is an uppercase modifier; brace ${VAR} before a colon.
 - Lambda base image (AL2, glibc 2.26) has no compiler: pip --only-binary=:all:.
