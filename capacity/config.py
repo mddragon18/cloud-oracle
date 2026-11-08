@@ -3,6 +3,7 @@
 Stores configurable thresholds, instance candidates, current deployment
 settings, and provisional capacity assumptions.
 """
+from typing import Optional
 
 # Target CPU utilisation for capacity sizing.
 DEFAULT_CPU_TARGET_PCT = 70.0
@@ -66,6 +67,31 @@ MEASURED_CPU_PCT_PER_100_RPM_SUSTAINED = 8.0
 # Default to sustained for conservative planning (credits always run out on free plan)
 MEASURED_CPU_PCT_PER_100_RPM = MEASURED_CPU_PCT_PER_100_RPM_SUSTAINED
 
+# Memory binding limits - OOM RPM = 620 rpm per GB of RAM.
+# Derived from real AWS run: t3.micro (1 GB) OOMs at ~620 rpm.
+# These are provisional until Member 1 provides measured capacity per instance type.
+OOM_RPM_PER_GB = 620
+
+# RAM (GB) for each candidate instance type
+INSTANCE_RAM_GB = {
+    "t3.micro": 1.0,
+    "t3.small": 2.0,
+    "t3.medium": 4.0,
+    "t3.large": 8.0,
+    "t3.xlarge": 16.0,
+    "t4g.micro": 1.0,
+    "t4g.small": 2.0,
+    "t4g.medium": 4.0,
+    "t4g.large": 8.0,
+    "t4g.xlarge": 16.0,
+    "m6i.large": 8.0,
+    "m6i.xlarge": 16.0,
+    "m6i.2xlarge": 32.0,
+    "c6i.large": 8.0,
+    "c6i.xlarge": 16.0,
+    "c6i.2xlarge": 32.0,
+}
+
 # Memory binding limit for t3.micro (real AWS run):
 # OOM at ~620 rpm per instance — RAM is binding constraint, not CPU
 T3_MICRO_OOM_RPM = 620
@@ -80,6 +106,13 @@ T3_OOM_RPM = {
     "t3.large": 4960,     # 8 GB
     "t3.xlarge": 9920,    # 16 GB
 }
+
+def get_oom_rpm(instance_type: str) -> Optional[int]:
+    """Get OOM RPM limit for an instance type based on its RAM."""
+    ram_gb = INSTANCE_RAM_GB.get(instance_type)
+    if ram_gb is None:
+        return None
+    return int(OOM_RPM_PER_GB * ram_gb)
 
 # Pricing region settings.
 AWS_REGION_CODE = "ap-south-1"
