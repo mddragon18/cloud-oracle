@@ -20,20 +20,22 @@ def _apply_memory_constraint(
     peak_rpm: float,
     config_module,
 ) -> tuple[int, bool]:
-    """Apply memory binding constraint for t3 family.
+    """Apply memory binding constraint for any instance type with known RAM.
 
     Returns (adjusted_instances, memory_constrained_flag).
     Applies +1 safety margin when memory-constrained.
+    Uses 620 rpm per GB of RAM (from t3.micro 1 GB = 620 rpm OOM limit).
     """
-    if instance_type in config_module.T3_OOM_RPM:
-        oom_rpm = config_module.T3_OOM_RPM[instance_type]
-        max_rpm = instances * oom_rpm
-        if peak_rpm > max_rpm:
-            # Need more instances to stay under memory limit
-            required = math.ceil(peak_rpm / oom_rpm)
-            # Apply safety margin (+1 spare server) for memory-constrained sizing too
-            required += config_module.SAFETY_MARGIN_INSTANCES
-            return required, True
+    oom_rpm = config_module.get_oom_rpm(instance_type)
+    if oom_rpm is None:
+        return instances, False
+    max_rpm = instances * oom_rpm
+    if peak_rpm > max_rpm:
+        # Need more instances to stay under memory limit
+        required = math.ceil(peak_rpm / oom_rpm)
+        # Apply safety margin (+1 spare server) for memory-constrained sizing too
+        required += config_module.SAFETY_MARGIN_INSTANCES
+        return required, True
     return instances, False
 
 
@@ -249,9 +251,14 @@ def plan(
     scale_out_hourly = scale_out_instances * scale_out_price
     scale_out_daily = scale_out_hourly * 24
 
-    # Scale-up: evaluate all larger instance types and pick the cheapest that fits
+    # Scale-up: evaluate all larger instance types (more RAM than current) and pick the cheapest that fits
     # We evaluate each candidate, apply memory constraints, and compute daily cost
-    larger_candidates = [t for t in config.CANDIDATE_INSTANCE_TYPES if t != current_type and t in prices]
+    # Scale-up means bigger memory, not just different type — filter by RAM > current RAM
+    current_ram = config.INSTANCE_RAM_GB.get(current_type, 0)
+    larger_candidates = [
+        t for t in config.CANDIDATE_INSTANCE_TYPES
+        if t in prices and config.INSTANCE_RAM_GB.get(t, 0) > current_ram
+    ]
     
     # For each candidate, compute: instances needed (with CPU + memory constraints) and daily cost
     scale_up_options = []
