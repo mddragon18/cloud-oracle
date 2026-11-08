@@ -1,7 +1,10 @@
 """API client for the dashboard, with an offline fallback that calls oracle_service directly."""
 import json
 import os
+import shutil
 import sys
+import tempfile
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -29,8 +32,56 @@ def demo_delta(sample_c2: dict, now: datetime) -> timedelta:
     newest = datetime.fromisoformat(sample_c2["series"][0]["timestamp"]) - timedelta(minutes=sample_c2["step_minutes"])
     return now.replace(second=0, microsecond=0) - newest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
 TIMEOUT_S = 15
+HEALTH_TIMEOUT_S = 3
+RECORDED = sorted((REPO / "data").glob("aws-run-*.csv"))  # Member 1's recorded AWS runs, committed to the repo
+EMBEDDED_BADGE = "Cloud backend offline: running the same code on recorded AWS data"
+_ENV_KEYS = ("ORACLE_SOURCE", "ORACLE_STORE", "LOCAL_METRICS_DIR", "DATA_DIR", "REPLAY_MODE", "ALERT_TOPIC_ARN")
+_ORIGINAL_ENV = {k: os.environ.get(k) for k in _ENV_KEYS}
+_SAMPLE_ENV = {"ORACLE_SOURCE": "sample", "ORACLE_STORE": "local"}
+_embedded_env: dict | None = None
+_embedded_lock = threading.Lock()
+
+
+def api_alive(url: str | None) -> bool:
+    """True if the API's /health answers within HEALTH_TIMEOUT_S."""
+    if not url:
+        return False
+    try:
+        return requests.get(url.rstrip("/") + "/health", timeout=HEALTH_TIMEOUT_S).ok
+    except requests.RequestException:
+        return False
+
+
+def _set_env(env: dict) -> None:
+    # shortcut: os.environ is process-wide, so concurrent viewers in different offline modes could race; fine while
+    # everyone on Cloud gets the same mode, revisit if sample and embedded viewers must coexist
+    for k, v in env.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
+def embedded_env() -> dict:
+    """Run the real pipeline once, in-process, on the recorded AWS CSVs into a temp local store (replay on, no SNS).
+    Returns the env that reads that store. Nothing here touches AWS."""
+    global _embedded_env
+    with _embedded_lock:
+        if _embedded_env is None:
+            tmp = Path(tempfile.mkdtemp(prefix="oracle-embedded-"))
+            (tmp / "metrics").mkdir()
+            for f in RECORDED:
+                shutil.copy(f, tmp / "metrics")
+            env = {"ORACLE_SOURCE": "local", "ORACLE_STORE": "local", "LOCAL_METRICS_DIR": str(tmp / "metrics"),
+                   "DATA_DIR": str(tmp), "REPLAY_MODE": "1", "ALERT_TOPIC_ARN": ""}
+            _set_env(env)
+            from service.oracle_service import pipeline
+            pipeline.run_once()
+            _embedded_env = env
+        return _embedded_env
 
 
 class ApiError(Exception):
@@ -38,9 +89,11 @@ class ApiError(Exception):
 
 
 class Client:
-    def __init__(self, base_url: str | None, now: datetime | None = None):
-        """base_url None -> offline mode (no HTTP). Offline sample data is shifted so it reads as current (demo only)."""
+    def __init__(self, base_url: str | None, now: datetime | None = None, embedded: bool = False):
+        """base_url None -> offline mode (no HTTP). Offline sample data is shifted so it reads as current (demo only).
+        embedded=True (offline only) -> the recorded AWS run, processed in-process by embedded_env()."""
         self.base_url = (base_url or "").rstrip("/") or None
+        self.embedded = embedded and not self.base_url
         self.now = now
         self._delta = None
 
@@ -68,9 +121,13 @@ class Client:
         return r.json(), r.headers
 
     def _offline(self, fn, *args):
-        # Offline = contract sample data only: never S3/DynamoDB, never AWS credentials.
-        os.environ["ORACLE_SOURCE"] = "sample"
-        os.environ["ORACLE_STORE"] = "local"
+        # Offline never reaches S3/DynamoDB or AWS credentials: contract sample, or the recorded CSVs in the repo.
+        if self.embedded:
+            _set_env(embedded_env())
+        else:
+            if _embedded_env and os.environ.get("DATA_DIR") == _embedded_env["DATA_DIR"]:
+                _set_env(_ORIGINAL_ENV)  # undo embedded mode's env, keep anything set outside it
+            _set_env(_SAMPLE_ENV)
         # core is FastAPI-free, so Streamlit Cloud needs no fastapi
         from service.oracle_service import core
 
@@ -88,6 +145,7 @@ class Client:
                 "confidence": h.get("X-Oracle-Confidence", "normal"), "data_age_minutes": int(age) if age else None,
                 "replay_at": h.get("X-Oracle-Replay-At")}
         doc, src = self._offline(lambda a: a.latest, "forecast")
+        src = "embedded" if self.embedded else src
         doc = self._demo(doc, src)
         return doc, src, self._offline(lambda a: a.quality, doc, self.now)
 
@@ -96,6 +154,7 @@ class Client:
             doc, h = self._http("GET", "/plan/latest")
             return doc, h.get("X-Oracle-Source", "live")
         doc, src = self._offline(lambda a: a.latest, "plan")
+        src = "embedded" if self.embedded else src
         return self._demo(doc, src), src
 
     def whatif(self, rpm: int) -> dict:
@@ -111,4 +170,5 @@ class Client:
     def recent(self, hours: int = 24) -> list[dict]:
         if self.base_url:
             return self._http("GET", "/metrics/recent", params={"hours": hours})[0]["rows"]
-        return self._demo(self._offline(lambda a: a.recent_metrics, hours))  # offline source is always the sample
+        rows = self._offline(lambda a: a.recent_metrics, hours)
+        return rows if self.embedded else self._demo(rows)  # sample rows are shifted to now; recorded rows stay real

@@ -2,8 +2,9 @@
 
     python service/dashboard/check_cloud.py
 
-Renders the dashboard with AppTest (no ORACLE_API_URL, no secrets) and asserts every panel shows,
-offline/demo mode is on, there are no error boxes or exceptions, and the what-if form works.
+Renders the dashboard with AppTest (no ORACLE_API_URL, no secrets) and asserts it falls back to embedded mode
+(the recorded AWS run, processed in-process), every panel shows, the honesty badges and banner are on, there are
+no error boxes or exceptions, and the what-if form works.
 """
 import os
 import sys
@@ -16,15 +17,16 @@ for mod in ("fastapi", "boto3", "statsmodels", "matplotlib"):
 
 at = AppTest.from_file("service/dashboard/app.py", default_timeout=60).run()
 assert not at.exception, at.exception
-assert not at.error, [e.value for e in at.error]  # demo countdown is shifted to the future: nothing red
+assert not at.error, [e.value for e in at.error]
 assert at.toggle[0].value is True, "should start in offline mode"
-assert any("Demo data: live API not connected yet" in i.value for i in at.info)
-assert not any("Low confidence" in w.value for w in at.warning), "demo data should read as current, no banner"
 md = " ".join(m.value for m in at.markdown)
+assert "Cloud backend offline: running the same code on recorded AWS data" in md, "missing embedded badge"
+assert "Replay of recorded run (2026-11-05)" in md and "Recorded run" in md
+assert any("Low confidence" in w.value for w in at.warning), "short recorded run must show the low-confidence banner"
 sub = " ".join(s.value for s in at.subheader)
 for panel in ("Forecast vs actual", "Model accuracy (offline evaluation)", "Options for peak", "What-if", "History (7 days)"):
     assert panel in sub, f"missing panel {panel!r}"
-assert "Scale out to 6 × t3.micro" in md and "Recommended" in md
+assert "<h1>Scale " in md and "Recommended" in md and "Options for peak 268 req/min" in sub
 assert len(at.get("plotly_chart")) >= 3, "expected rpm, CPU and memory charts"
 countdown = [x.value for x in (*at.success, *at.warning, *at.error) if "CPU" in x.value or "exhaustion" in x.value]
 assert countdown, "missing exhaustion countdown"
