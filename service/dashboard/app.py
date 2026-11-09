@@ -6,7 +6,7 @@ from html import escape
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from client import ApiError, Client
+from client import EMBEDDED_BADGE, RECORDED, ApiError, Client, api_alive
 
 # Console palette, light values. Plotly can't read CSS variables, so CSS repaints these exact colours in dark mode.
 INK, MUTED, GRID, HUE, HUE_BAND = "#17130f", "#4f4a41", "#ddd9cf", "#0f4fa8", "rgba(15,79,168,0.16)"
@@ -226,25 +226,30 @@ def main():
         except Exception:  # noqa: BLE001 — malformed secrets must not take the dashboard down
             return ""
 
+    @st.cache_data(ttl=60, show_spinner=False)
+    def alive(url: str) -> bool:
+        return api_alive(url)
+
     # top bar: mark + name + scope on the left; connection and refresh on the right
     brand, conn, refresh = st.columns([6, 1.3, 1], vertical_alignment="center")
     with conn, st.popover("Connection", use_container_width=True):
-        offline = st.toggle("Offline mode", value=not default_url(),
+        offline = st.toggle("Offline mode", value=not alive(default_url()),
                             help="Call the service code directly instead of the API")
         url = st.text_input("API URL", default_url() or "http://localhost:8000", disabled=offline)
     with refresh:
         if st.button("Refresh", use_container_width=True):
             st.cache_data.clear()
+    embedded = offline and bool(RECORDED)  # API down or not set: run the same code on the recorded AWS run
+    scope = "recorded AWS run, in-process" if embedded else ("demo data" if offline else "ap-south-1 · live API")
     with brand:
         st.markdown(f'<div class="bar">{MARK_SVG}<span class="name">Capacity Oracle</span>'
-                    f'<span class="scope">{"demo data" if offline else "ap-south-1 · live API"}</span></div>',
-                    unsafe_allow_html=True)
+                    f'<span class="scope">{scope}</span></div>', unsafe_allow_html=True)
 
-    client = Client(None if offline else url)
+    client = Client(None if offline else url, embedded=embedded)
 
     @st.cache_data(ttl=60, show_spinner=False)
-    def get(kind: str, base: str | None, arg=None):
-        c = Client(base)
+    def get(kind: str, base: str | None, arg=None, emb: bool = False):
+        c = Client(base, embedded=emb)
         return {"forecast": c.forecast, "plan": c.plan, "history": c.history, "recent": c.recent}[kind](
             *([] if arg is None else [arg]))
 
@@ -252,20 +257,22 @@ def main():
     now = datetime.now(UTC)
     try:
         with st.spinner("Loading forecast and plan…"):
-            c2, src, quality = get("forecast", base)
-            c3, _ = get("plan", base)
+            c2, src, quality = get("forecast", base, None, embedded)
+            c3, _ = get("plan", base, None, embedded)
     except ApiError as e:
         st.error(f"{e}. Check the URL or turn on Offline mode under Connection.")
         st.stop()
 
     try:
-        actual = pd.DataFrame(get("recent", base, 24))
+        actual = pd.DataFrame(get("recent", base, 24, embedded))
         actual_err = None
     except ApiError as e:
         actual, actual_err = pd.DataFrame(), e
 
     # 1. notices, then the title row: the answer is the h1, the reason is its subline
-    if offline:
+    if embedded:
+        st.markdown(f'<span class="pill notice">{EMBEDDED_BADGE}</span>', unsafe_allow_html=True)
+    elif offline:
         st.info("Demo data: live API not connected yet")
     if quality["confidence"] == "low":
         st.warning(low_confidence_text(len(actual) if not actual.empty else None))
@@ -275,7 +282,7 @@ def main():
         st.markdown(f'<span class="pill notice">{replay}</span>', unsafe_allow_html=True)
     dot = "low" if quality["confidence"] == "low" else ("live" if src == "live" else "")
     st.markdown(f'<div class="status"><span class="dot {dot}"></span>'
-                f'{"Sample data" if src == "sample" else "Live"} · {age_text(c3.get("generated_at"), now)} · '
+                f'{ {"sample": "Sample data", "embedded": "Recorded run"}.get(src, "Live")} · {age_text(c3.get("generated_at"), now)} · '
                 f'{data_age_text(quality["data_age_minutes"])} · {escape(accuracy_text(c2))}</div>',
                 unsafe_allow_html=True)
     st.markdown(f"<h1>{escape(headline(c3))}</h1><div class='reason'>{compare_html(c3)}</div>",
@@ -378,7 +385,7 @@ def main():
     # 6. history
     st.subheader("History (7 days)")
     try:
-        hist = get("history", base, 7)
+        hist = get("history", base, 7, embedded)
     except ApiError as e:
         hist = []
         st.info(f"History unavailable: {e}")

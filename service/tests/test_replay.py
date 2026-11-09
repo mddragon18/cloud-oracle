@@ -68,6 +68,8 @@ def test_badge_shown_only_in_replay(monkeypatch):
     assert replay_text(None) is None and replay_text(NEWEST) == "Replay of recorded run (2026-10-25)"
     monkeypatch.delenv("ORACLE_API_URL", raising=False)
     monkeypatch.delenv("REPLAY_MODE", raising=False)
+    import client  # embedded mode always replays, so test the badge on the sample path
+    monkeypatch.setattr(client, "RECORDED", [])
     badge = lambda at: any("Replay of recorded run" in m.value for m in at.markdown)  # noqa: E731
     assert not badge(AppTest.from_file("service/dashboard/app.py", default_timeout=60).run())
     monkeypatch.setenv("REPLAY_MODE", "1")

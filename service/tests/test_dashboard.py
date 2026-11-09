@@ -46,8 +46,10 @@ def test_unreachable_api():
         Client("http://127.0.0.1:9").plan()
 
 
-def test_page_renders_offline():
+def test_page_renders_offline(monkeypatch):
+    import client  # the module app.py imports (service/dashboard is on sys.path)
     from streamlit.testing.v1 import AppTest
+    monkeypatch.setattr(client, "RECORDED", [])  # no recorded run -> the contract-sample demo
     at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "dashboard" / "app.py"), default_timeout=30).run()
     assert not at.exception
     assert any("Scale out to" in m.value for m in at.markdown)
@@ -126,3 +128,31 @@ def test_break_gaps_only_over_five_minutes():
     out = dash.break_gaps(rows)
     assert [r["requests_per_min"] for r in out] == [1.0, 1.0, None, 1.0]
     assert out[2]["timestamp"] == rows[2]["timestamp"]
+
+
+def test_embedded_runs_recorded_aws_data_without_aws(monkeypatch):
+    import service.dashboard.client as cl
+    monkeypatch.setattr(cl, "_embedded_env", None)
+    monkeypatch.setattr(cl.requests, "request", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no HTTP")))
+    c = Client(None, embedded=True)
+    c2, src, q = c.forecast()
+    c3, _ = c.plan()
+    assert src == "embedded" and q["replay_at"] == "2026-11-05T11:19:00Z" and q["data_age_minutes"] == 0
+    assert c3["peak_requests_per_min"] == 268 and c3["options"][0] == {**c3["options"][0], "instances": 2,
+                                                                         "instance_type": "t3.micro"}
+    assert len(c.recent(24)) == 155 and len(c.history(7)) == 1 and c.whatif(500)["options"]
+    assert Client(None).forecast()[1] == "sample"  # the sample demo still reads the sample afterwards
+
+
+def test_api_alive_needs_health_within_timeout(monkeypatch):
+    import service.dashboard.client as cl
+    assert not cl.api_alive("")
+    seen = {}
+
+    def fake_get(url, timeout):
+        seen.update(url=url, timeout=timeout)
+        raise cl.requests.Timeout()
+    monkeypatch.setattr(cl.requests, "get", fake_get)
+    assert not cl.api_alive("http://x/") and seen == {"url": "http://x/health", "timeout": 3}
+    monkeypatch.setattr(cl.requests, "get", lambda url, timeout: type("R", (), {"ok": True})())
+    assert cl.api_alive("http://x")
