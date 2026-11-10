@@ -24,10 +24,12 @@ def run_once(cfg: config.Config | None = None, force_alert: bool = False) -> dic
         if age > STALE_MIN:  # lookback is measured from the newest row, so stale data looks "current"
             log.warning(json.dumps({"event": "stale_metrics", "data_age_minutes": age}))
         c2 = engine.run_forecast(engine.aggregate(rows, cfg.aggregate_mode))
-        c3 = engine.run_plan(c2, engine.run_baseline(rows))
+        base = engine.run_baseline(rows)
+        c3 = engine.run_plan(c2, base)
         store = get_store(cfg)
         store.put("forecast", c2)
         store.put("plan", c3)
+        store.put("baseline", {"generated_at": c3["generated_at"], "baseline": base})  # lets POST /plan skip S3
         alert = alerts.check(c3, store, cfg, now=now, force=force_alert, c2=c2, data_age_minutes=age)
     except Exception:
         log.exception(json.dumps({"event": "pipeline_failed", "ms": round((time.monotonic() - t0) * 1000)}))

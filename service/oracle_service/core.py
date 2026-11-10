@@ -47,8 +47,13 @@ def latest_plan() -> dict:
 
 
 def whatif_plan(expected_rpm: int) -> dict:
-    """Fresh C3 for a what-if load, baseline from the current source. Not stored."""
+    """Fresh C3 for a what-if load. Uses the pipeline's latest stored forecast and baseline; only re-reads the
+    metrics source (slow on S3) when none is stored yet. Not stored."""
     cfg = config.load()
+    store = get_store(cfg)
+    c2, base = store.latest("forecast"), store.latest("baseline")
+    if c2 and base:
+        return engine.whatif_from(expected_rpm, validate("forecast", c2), base["baseline"])
     return engine.whatif(expected_rpm, get_source(cfg).get_rows(cfg.lookback_hours), cfg.aggregate_mode)
 
 

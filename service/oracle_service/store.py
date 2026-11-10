@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .config import Config
 
-KINDS = ("forecast", "plan", "alert")
+KINDS = ("forecast", "plan", "alert", "baseline")
 TTL_DAYS = 30
 
 

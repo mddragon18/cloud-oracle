@@ -56,7 +56,9 @@ def countdown(exhaustion_at: str | None, threshold: float, now: datetime) -> tup
     return f"CPU reaches {threshold:g}% in {duration(left)} ({when})", level
 
 
-def low_confidence_text(n_rows: int | None) -> str:
+def low_confidence_text(n_rows: int | None, mape: float | None = None) -> str:
+    if mape is not None:  # a measured model whose held-out error is too high
+        return f"Low confidence: forecast error {mape:.0f}% on held-out data; numbers may be unrealistic"
     rows = f"only {n_rows} rows of history" if n_rows is not None else "little history"
     return f"Low confidence: {rows}, simple model; numbers may be unrealistic"
 
@@ -275,7 +277,8 @@ def main():
     elif offline:
         st.info("Demo data: live API not connected yet")
     if quality["confidence"] == "low":
-        st.warning(low_confidence_text(len(actual) if not actual.empty else None))
+        st.warning(low_confidence_text(len(actual) if not actual.empty else None,
+                                       (c2.get("accuracy") or {}).get("mape_pct")))
     replay = replay_text(quality.get("replay_at"))
     clock = parse(quality["replay_at"]) if replay else now  # "updated N ago" below stays on the wall clock
     if replay:

@@ -3,7 +3,7 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 
-from .config import Config
+from .config import Config, load
 from .sources import parse_ts
 from .store import iso
 
@@ -14,10 +14,11 @@ STALE_MIN = 30
 
 
 def low_confidence(c2: dict | None) -> bool:
-    """Naive model or no measured accuracy -> numbers may be unrealistic."""
+    """Naive model, no measured accuracy, or error above CONFIDENCE_MAX_MAPE -> numbers may be unrealistic."""
     if not c2:
         return False
-    return c2.get("model") == "naive" or (c2.get("accuracy") or {}).get("mape_pct") is None
+    mape = (c2.get("accuracy") or {}).get("mape_pct")
+    return c2.get("model") == "naive" or mape is None or mape > load().confidence_max_mape
 
 
 def alert_kind(c3: dict, now: datetime, window_min: int) -> str | None:
@@ -84,7 +85,7 @@ def check(c3: dict, store, cfg: Config, now: datetime | None = None, force: bool
         if data_age_minutes is not None and data_age_minutes > STALE_MIN:
             return _skip("stale", "alert skipped: stale data")
         if low_confidence(c2):
-            return _skip("low_confidence", "alert skipped: low-confidence forecast (naive model or no accuracy)")
+            return _skip("low_confidence", "alert skipped: low-confidence forecast (naive model, no accuracy or high error)")
         if kind is None:
             return "none"
         if is_duplicate(store, c3["exhaustion_at"], now):

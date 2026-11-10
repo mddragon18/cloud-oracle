@@ -58,7 +58,12 @@ def run_plan(c2: dict, base: dict) -> dict:
 
 def whatif(expected_rpm: int, rows: list[dict], mode: str = "raw") -> dict:
     """Fresh C3 with every forecast point set to expected_rpm. The tweaked C2 stays internal."""
-    c2 = copy.deepcopy(run_forecast(aggregate(rows, mode)))
+    return whatif_from(expected_rpm, run_forecast(aggregate(rows, mode)), run_baseline(rows))
+
+
+def whatif_from(expected_rpm: int, c2: dict, base: dict) -> dict:
+    """Same as whatif() but from an already computed C2 and baseline (no metric rows needed)."""
+    c2 = copy.deepcopy(c2)
     for s in c2["series"]:
         s["requests_per_min"] = expected_rpm
-    return run_plan(c2, run_baseline(rows))
+    return run_plan(c2, base)
