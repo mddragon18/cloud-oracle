@@ -149,10 +149,25 @@ def test_api_alive_needs_health_within_timeout(monkeypatch):
     assert not cl.api_alive("")
     seen = {}
 
-    def fake_get(url, timeout):
+    def fake_get(url, timeout, **kw):
         seen.update(url=url, timeout=timeout)
         raise cl.requests.Timeout()
     monkeypatch.setattr(cl.requests, "get", fake_get)
     assert not cl.api_alive("http://x/") and seen == {"url": "http://x/health", "timeout": 3}
-    monkeypatch.setattr(cl.requests, "get", lambda url, timeout: type("R", (), {"ok": True})())
-    assert cl.api_alive("http://x")
+
+
+def health_reply(monkeypatch, status, body):
+    import service.dashboard.client as cl
+    r = cl.requests.Response()
+    r.status_code, r._content = status, body.encode()
+    monkeypatch.setattr(cl.requests, "get", lambda *a, **k: r)
+    return cl.api_alive("http://x")
+
+
+def test_api_alive_only_on_200_status_ok(monkeypatch):
+    assert health_reply(monkeypatch, 200, '{"status": "ok"}')
+    assert not health_reply(monkeypatch, 500, '{"message":"Internal Server Error"}')  # the dead API today
+    assert not health_reply(monkeypatch, 404, '{"message":"Not Found"}')
+    assert not health_reply(monkeypatch, 200, '{"status": "degraded"}')
+    assert not health_reply(monkeypatch, 200, "<html>login</html>")  # not JSON
+    assert not health_reply(monkeypatch, 302, "")

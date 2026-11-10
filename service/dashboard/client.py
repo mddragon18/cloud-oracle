@@ -46,12 +46,13 @@ _embedded_lock = threading.Lock()
 
 
 def api_alive(url: str | None) -> bool:
-    """True if the API's /health answers within HEALTH_TIMEOUT_S."""
+    """True only if /health answers 200 with exactly {"status": "ok"} within HEALTH_TIMEOUT_S; anything else is down."""
     if not url:
         return False
     try:
-        return requests.get(url.rstrip("/") + "/health", timeout=HEALTH_TIMEOUT_S).ok
-    except requests.RequestException:
+        r = requests.get(url.rstrip("/") + "/health", timeout=HEALTH_TIMEOUT_S, allow_redirects=False)
+        return r.status_code == 200 and r.json() == {"status": "ok"}
+    except (requests.RequestException, ValueError):  # ValueError: body is not JSON
         return False
 
 
