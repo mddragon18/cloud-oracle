@@ -70,6 +70,32 @@ def test_instances_are_summed():
     assert 1.8 < ratio < 2.2, ratio
 
 
+def test_latest_stretch_with_lost_server():
+    """Regression for the Nov-7 284% MAPE: an old run 2 days earlier must not count as history
+    (the gap was interpolated into fake data), and a server that stops reporting is not a demand drop."""
+    import pandas as pd
+    from forecasting.synthetic import generate
+    old = generate("steady", days=1, start="2026-11-05T00:00:00Z")
+    servers = [generate("steady", days=1, start="2026-11-07T00:00:00Z", seed=s).head(10 * 60)
+               .assign(instance_id=f"i-0{s}") for s in (1, 2, 3)]
+    servers[0] = servers[0].head(6 * 60)  # i-01 stops reporting after 6 h; the others keep their share
+    result = forecast(pd.concat([old, *servers]))
+    check_c2(result)
+    assert result["model"] == "arima-short", result["model"]  # 10 h stretch: no daily cycle, no 2-day ARIMA
+    assert result["accuracy"]["holdout_minutes"] == 180
+    assert result["accuracy"]["mape_pct"] < 10, result["accuracy"]
+    level = result["series"][0]["requests_per_min"]
+    assert 1350 < level < 1650, level  # 3 x ~500 rpm, not 2 x 500 after i-01 went quiet
+    assert all(r["requests_per_min"] < 2000 for r in result["series"])  # no trend runaway
+
+    # the other case (Nov 4): the one server left takes over everyone's traffic -> no scaling
+    from forecasting.forecast import latest_stretch
+    took_over = servers[1].head(6 * 60 + 60).copy()
+    took_over.iloc[6 * 60:, took_over.columns.get_loc("requests_per_min")] *= 3
+    pts = latest_stretch(pd.concat([servers[0], servers[2].head(6 * 60), took_over]).to_dict("records"))
+    assert 1350 < pts[-1][1] < 1650, pts[-1][1]  # ~3 x 500, not 9 x 500
+
+
 def test_loaders():
     import pandas as pd
     from forecasting.loaders import azure_functions, wikipedia
