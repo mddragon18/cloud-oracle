@@ -60,3 +60,15 @@ def test_exclude_windows_end_exclusive_on_every_source(tmp_path, monkeypatch, ca
     assert '"dropped": 2' in caplog.text
     monkeypatch.setenv("EXCLUDE_WINDOWS", "")
     assert len(LocalSource(tmp_path).get_rows(168)) == 4
+
+
+@mock_aws
+def test_s3_parallel_read_keeps_newest_file_winning():
+    s3 = boto3.client("s3", region_name="ap-south-1")
+    s3.create_bucket(Bucket="oracle-metrics", CreateBucketConfiguration={"LocationConstraint": "ap-south-1"})
+    for n in range(60):  # more objects than workers
+        rows = [HDR, line("2026-10-25T10:00:00Z", "i-1", rpm=n + 1), line(f"2026-10-25T{10 + n // 60}:{n % 60:02d}:30Z", "i-2")]
+        s3.put_object(Bucket="oracle-metrics", Key=f"metrics/i-1/metrics-20261025T10{n:04d}Z.csv", Body="\n".join(rows))
+    rows = S3Source("oracle-metrics", "ap-south-1", client=s3).get_rows(168)
+    assert next(r for r in rows if r["instance_id"] == "i-1")["requests_per_min"] == 60  # last key wins
+    assert len(rows) == 61

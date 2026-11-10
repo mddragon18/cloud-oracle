@@ -16,6 +16,8 @@ pipeline-once:      # one forecast+plan run; ORACLE_SOURCE=sample|local|s3
 test:
 	cd "$(ROOT)" && $(PY) service/tests/test_api.py && $(PY) -m pytest service/tests -q
 
+# Tests assume default env: a REPLAY_MODE=1 meant for the deploy must not reach them (deploy itself still sees it).
+test test-all: export REPLAY_MODE :=
 test-all: test      # separate pytest runs: service and capacity tests clash when collected together
 	cd "$(ROOT)" && $(PY) -m pytest capacity -q && $(PY) -m pytest forecasting -q && $(PY) service/dashboard/check_cloud.py
 

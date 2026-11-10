@@ -3,6 +3,7 @@ import csv
 import io
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +13,7 @@ log = logging.getLogger(__name__)
 
 NUMERIC = ("requests_per_min", "avg_latency_ms", "p95_latency_ms", "cpu_pct",
            "mem_pct", "net_in_kb", "net_out_kb", "disk_used_gb")
+S3_READ_WORKERS = 32
 SAMPLE_C1 = REPO / "contracts" / "C1-metrics.sample.csv"
 
 
@@ -94,11 +96,15 @@ class S3Source:
                     keys.append(obj["Key"])
         if not keys:
             raise NoMetricsError(f"no metrics/<instance>/*.csv objects in s3://{self.bucket}")
-        rows = []
-        for key in keys:
-            body = self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read().decode()
-            rows += parse_csv(body)
-        return finish(rows, since_hours)
+        client = self.client  # create once, before the threads; boto3 clients are thread-safe
+
+        def read(key: str) -> list[dict]:
+            return parse_csv(client.get_object(Bucket=self.bucket, Key=key)["Body"].read().decode())
+
+        # hundreds of small objects: read them in parallel or POST /plan outruns API Gateway's 30 s
+        with ThreadPoolExecutor(max_workers=S3_READ_WORKERS) as pool:
+            parts = list(pool.map(read, keys))  # map keeps key order, so finish() still lets newer files win
+        return finish([r for part in parts for r in part], since_hours)
 
 
 def get_source(cfg: Config):
