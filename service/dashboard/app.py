@@ -41,7 +41,9 @@ def accuracy_text(c2: dict) -> str:
     if acc.get("mape_pct") is None:
         return f"{c2.get('model', '?')} · not enough history yet"
     rmse = f", RMSE {acc['rmse']:.1f}" if acc.get("rmse") is not None else ""
-    return f"{c2.get('model', '?')} · MAPE {acc['mape_pct']:.1f}%{rmse}"
+    m = acc.get("holdout_minutes")  # how much held-out data the MAPE was scored on (Member 2, #33)
+    window = f" (last {m // 60} h)" if m and m % 60 == 0 else (f" (last {m} min)" if m else "")
+    return f"{c2.get('model', '?')} · MAPE {acc['mape_pct']:.1f}%{window}{rmse}"
 
 
 def countdown(exhaustion_at: str | None, threshold: float, now: datetime) -> tuple[str, str]:

@@ -171,3 +171,17 @@ def test_api_alive_only_on_200_status_ok(monkeypatch):
     assert not health_reply(monkeypatch, 200, '{"status": "degraded"}')
     assert not health_reply(monkeypatch, 200, "<html>login</html>")  # not JSON
     assert not health_reply(monkeypatch, 302, "")
+
+
+def test_accuracy_text_names_the_holdout_window():
+    def text(minutes, model="arima-short"):
+        return dash.accuracy_text({"model": model, "accuracy": {"mape_pct": 6.44, "rmse": None, "holdout_minutes": minutes}})
+    assert text(180) == "arima-short · MAPE 6.4% (last 3 h)"
+    assert text(1440, "arima") == "arima · MAPE 6.4% (last 24 h)"
+    assert text(90) == "arima-short · MAPE 6.4% (last 90 min)"
+    assert text(None) == "arima-short · MAPE 6.4%"  # older forecasts have no holdout_minutes
+
+
+def test_arima_short_is_a_normal_model():
+    from service.oracle_service.alerts import low_confidence
+    assert not low_confidence({"model": "arima-short", "accuracy": {"mape_pct": 6.4, "rmse": 1.0, "holdout_minutes": 180}})
