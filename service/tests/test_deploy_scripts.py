@@ -72,3 +72,8 @@ def test_deploy_keeps_replay_unless_passed(tmp_path):
 def test_deploy_stops_if_replay_unreadable(tmp_path):
     r = current_replay(tmp_path, "echo AccessDenied; exit 1")
     assert r.returncode != 0 and "got=" not in r.stdout
+
+
+def test_lambdas_run_math_libraries_single_threaded():
+    env_line = next(l for l in (REPO / "service/deploy/up.sh").read_text().splitlines() if l.startswith('ENV_VARS="Variables='))
+    assert all(f"{v}=1" in env_line for v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"))
