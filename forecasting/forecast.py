@@ -1,9 +1,15 @@
 """Module 2: forecast(metrics) -> C2 dict (contracts/README.md).
 
-ARIMA with daily Fourier terms on 15-minute load, once there are >= 2 days of
-history (1 day to train + 1 held-out day for accuracy). Shorter inputs fall back
-to a flat recent average that needs only the stdlib, so callers without
-pandas/statsmodels (capacity, service tests on the 2-row sample) keep working.
+Only the latest unbroken stretch of metrics is used (a gap over GAP_MINUTES starts
+a new one), with the cluster total scaled up for servers that stopped reporting.
+On that stretch:
+- >= 2 days: ARIMA with daily Fourier terms on 15-minute load (1 day to train +
+  1 held-out day for accuracy).
+- >= 6 h: "arima-short", ARIMA with no daily cycle and no trend (both need more
+  history than this; a trend term ran away to 1,119 rpm on the Nov-7 run).
+  Accuracy is scored on the last 3 h, and `accuracy.holdout_minutes` says so.
+- shorter: a flat recent average that needs only the stdlib, so callers without
+  pandas/statsmodels (capacity, service tests on the 2-row sample) keep working.
 """
 import csv
 import json
@@ -13,6 +19,9 @@ from datetime import datetime, timedelta, timezone
 NUMERIC = ("requests_per_min", "avg_latency_ms", "p95_latency_ms", "cpu_pct",
            "mem_pct", "net_in_kb", "net_out_kb", "disk_used_gb")
 MIN_HISTORY_MINUTES = 2 * 1440
+MIN_SHORT_MINUTES = 6 * 60  # arima-short needs this much; below it, naive
+SHORT_HOLDOUT_MINUTES = 3 * 60
+GAP_MINUTES = 15  # a longer gap ends a stretch; shorter ones are interpolated
 NAIVE_WINDOW_MINUTES = 30  # short-history fallback averages the last 30 minutes
 FOURIER_K = 3  # harmonics of the daily cycle; 3 fits a day/night shape without overfitting
 
@@ -38,8 +47,8 @@ def _iso(dt):
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _per_minute(rows):
-    """All instances -> one point per minute: total rpm, mean cpu/mem. Sorted by time."""
+def _per_minute_n(rows):
+    """All instances -> one point per minute: (time, total rpm, mean cpu, mean mem, servers reporting)."""
     acc = {}
     for r in rows:
         a = acc.setdefault(r["timestamp"], [0.0, 0.0, 0.0, 0])
@@ -47,19 +56,60 @@ def _per_minute(rows):
         a[1] += float(r["cpu_pct"])
         a[2] += float(r["mem_pct"])
         a[3] += 1
-    return sorted((_parse(ts), rpm, cpu / n, mem / n) for ts, (rpm, cpu, mem, n) in acc.items())
+    return sorted((_parse(ts), rpm, cpu / n, mem / n, n) for ts, (rpm, cpu, mem, n) in acc.items())
+
+
+def _per_minute(rows):
+    """All instances -> one point per minute: total rpm, mean cpu/mem. Sorted by time."""
+    return [p[:4] for p in _per_minute_n(rows)]
+
+
+def latest_stretch(rows):
+    """Per-minute points of the newest unbroken stretch, with missing servers' traffic filled in.
+
+    When fewer servers report than the most seen in the stretch, two things can have happened:
+    - the rest still served their share but stopped reporting (Nov 7: i-01 went quiet at 16:07,
+      i-02/i-03 went 138 -> 152 rpm each, demand stayed ~455): scale the total by full / reporting;
+    - the survivors took over the traffic (Nov 4: one server carried ~2,100 rpm alone): keep it.
+    Told apart by the survivors' per-server rpm against the full minutes just before: past
+    halfway to the full / reporting jump counts as taken over.
+    """
+    import statistics
+    points = _per_minute_n(rows)
+    start = 0
+    for i in range(1, len(points)):
+        if (points[i][0] - points[i - 1][0]).total_seconds() > GAP_MINUTES * 60:
+            start = i
+    points = points[start:]
+    full = max((p[4] for p in points), default=1)
+    out, i = [], 0
+    while i < len(points):
+        n, j = points[i][4], i
+        while j < len(points) and points[j][4] == n:
+            j += 1
+        k = full / n
+        if n < full:  # compare this run of minutes with the full minutes just before it
+            before = [p[1] / p[4] for p in points[max(0, i - 15):i] if p[4] == full]
+            after = [p[1] / n for p in points[i:min(j, i + 15)]]
+            if not before or statistics.fmean(after) > statistics.fmean(before) * (1 + k) / 2:
+                k = 1  # taken over, or nothing to compare with: trust the reported total
+        out += [(t, rpm * k, cpu, mem) for t, rpm, cpu, mem, _ in points[i:j]]
+        i = j
+    return out
 
 
 def forecast(metrics, horizon_minutes=1440, step_minutes=15, cpu_threshold_pct=70.0):
     """metrics: list of C1 row dicts or a C1 DataFrame -> C2 dict."""
     if hasattr(metrics, "to_dict"):
         metrics = metrics.to_dict("records")
-    points = _per_minute(metrics)
+    points = latest_stretch(metrics)
     if len(points) < 2:
-        raise ValueError("need at least 2 C1 timestamps")
+        raise ValueError("need at least 2 C1 timestamps in the latest stretch")
     span = (points[-1][0] - points[0][0]).total_seconds() / 60
     if span >= MIN_HISTORY_MINUTES:
         series, accuracy, model = _arima(points, horizon_minutes, step_minutes)
+    elif span >= MIN_SHORT_MINUTES:
+        series, accuracy, model = _arima(points, horizon_minutes, step_minutes, daily=False)
     else:
         series, accuracy, model = _naive(points, horizon_minutes, step_minutes)
 
@@ -119,15 +169,20 @@ def _fourier(start, n, period):
     return np.column_stack(cols)
 
 
-def _fit_predict(y, steps, period):
-    """Fit ARIMA(2,0,1)+trend+daily Fourier on y; return (mean, lower, upper) arrays for `steps` ahead."""
+def _fit_predict(y, steps, period, daily=True):
+    """Fit ARIMA(2,0,1) on y, with trend + daily Fourier terms if `daily`, else a constant only.
+    Returns (mean, lower, upper) arrays for `steps` ahead."""
     import warnings
     import numpy as np
     from statsmodels.tsa.arima.model import ARIMA
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # convergence chatter on flat series
-        fit = ARIMA(y, exog=_fourier(0, len(y), period), order=(2, 0, 1), trend="ct").fit()
-        fc = fit.get_forecast(steps, exog=_fourier(len(y), steps, period))
+        if daily:
+            fit = ARIMA(y, exog=_fourier(0, len(y), period), order=(2, 0, 1), trend="ct").fit()
+            fc = fit.get_forecast(steps, exog=_fourier(len(y), steps, period))
+        else:
+            fit = ARIMA(y, order=(2, 0, 1), trend="c").fit()
+            fc = fit.get_forecast(steps)
     ci = np.asarray(fc.conf_int(alpha=0.2))  # 80% band
     return np.asarray(fc.predicted_mean), ci[:, 0], ci[:, 1]
 
@@ -142,21 +197,23 @@ def errors(actual, predicted):
             "mape_pct": float(np.mean(np.abs((a[nz] - p[nz]) / a[nz])) * 100) if nz.any() else None}
 
 
-def holdout(points, step_minutes=15):
-    """Train on all but the last day, predict that day. Returns (actual Series, predicted array, errors)."""
+def holdout(points, step_minutes=15, holdout_minutes=1440, daily=True):
+    """Train on all but the last `holdout_minutes`, predict them. Returns (actual Series, predicted array, errors)."""
     df = _frame(points, step_minutes)
     period = 1440 // step_minutes
-    pred, _, _ = _fit_predict(df["rpm"].to_numpy()[:-period], period, period)
-    actual = df["rpm"].iloc[-period:]
+    n = holdout_minutes // step_minutes
+    pred, _, _ = _fit_predict(df["rpm"].to_numpy()[:-n], n, period, daily)
+    actual = df["rpm"].iloc[-n:]
     return actual, pred, errors(actual.to_numpy(), pred)
 
 
-def _arima(points, horizon_minutes, step_minutes):
+def _arima(points, horizon_minutes, step_minutes, daily=True):
     import numpy as np
-    _, _, err = holdout(points, step_minutes)
+    held = 1440 if daily else SHORT_HOLDOUT_MINUTES
+    _, _, err = holdout(points, step_minutes, held, daily)
     df = _frame(points, step_minutes)
     period = 1440 // step_minutes
-    mean, lower, upper = _fit_predict(df["rpm"].to_numpy(), horizon_minutes // step_minutes, period)
+    mean, lower, upper = _fit_predict(df["rpm"].to_numpy(), horizon_minutes // step_minutes, period, daily)
     # CPU/mem follow load: least-squares line learned from history
     cpu_a, cpu_b = np.polyfit(df["rpm"], df["cpu"], 1)
     mem_a, mem_b = np.polyfit(df["rpm"], df["mem"], 1)
@@ -165,8 +222,8 @@ def _arima(points, horizon_minutes, step_minutes):
                    cpu_a * m + cpu_b, mem_a * m + mem_b, lo, hi)
               for i, (m, lo, hi) in enumerate(zip(mean, lower, upper))]
     accuracy = {"mape_pct": None if err["mape_pct"] is None else round(err["mape_pct"], 2),
-                "rmse": round(err["rmse"], 2)}
-    return series, accuracy, "arima"
+                "rmse": round(err["rmse"], 2), "holdout_minutes": held}
+    return series, accuracy, "arima" if daily else "arima-short"
 
 
 if __name__ == "__main__":
