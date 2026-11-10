@@ -33,3 +33,6 @@ data/local-metrics/
 
 # Local Claude Code settings
 .claude/
+
+# Local data audits (may list bucket contents); never commit
+audit/

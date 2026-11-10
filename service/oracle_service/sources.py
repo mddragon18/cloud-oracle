@@ -84,7 +84,9 @@ class S3Source:
     def client(self):
         if self._client is None:
             import boto3
-            self._client = boto3.client("s3", region_name=self.region)
+            from botocore.config import Config as BotoConfig
+            self._client = boto3.client("s3", region_name=self.region,  # one pooled connection per reader thread
+                                        config=BotoConfig(max_pool_connections=S3_READ_WORKERS))
         return self._client
 
     def get_rows(self, since_hours: float) -> list[dict]:

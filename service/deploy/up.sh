@@ -80,7 +80,8 @@ done
 log "7. Lambda functions ($ARCH)"
 REPLAY_MODE="${REPLAY_MODE:-$(current_replay)}"  # routine deploys keep it; pass REPLAY_MODE=0|1 to change
 echo "REPLAY_MODE=$REPLAY_MODE"
-ENV_VARS="Variables={ORACLE_STORE=dynamo,ORACLE_SOURCE=s3,METRICS_BUCKET=$METRICS_BUCKET,RESULTS_TABLE=$TABLE,ALERT_TOPIC_ARN=$TOPIC_ARN,DASHBOARD_URL=${DASHBOARD_URL:-https://cloud-oracle-ge5svfjhkafdnfipesqylt.streamlit.app},REPLAY_MODE=$REPLAY_MODE,MPLCONFIGDIR=/tmp}"
+# One math-library thread: on Lambda's small CPU share, multi-threaded BLAS made the ARIMA fit hang past 120 s (2026-11-10).
+ENV_VARS="Variables={ORACLE_STORE=dynamo,ORACLE_SOURCE=s3,METRICS_BUCKET=$METRICS_BUCKET,RESULTS_TABLE=$TABLE,ALERT_TOPIC_ARN=$TOPIC_ARN,DASHBOARD_URL=${DASHBOARD_URL:-https://cloud-oracle-ge5svfjhkafdnfipesqylt.streamlit.app},REPLAY_MODE=$REPLAY_MODE,MPLCONFIGDIR=/tmp,OPENBLAS_NUM_THREADS=1,OMP_NUM_THREADS=1,MKL_NUM_THREADS=1}"
 deploy_fn() {  # name timeout handler
   local name=$1 timeout=$2 cmd=$3
   if ! aws lambda get-function --function-name "$name" >/dev/null 2>&1; then
