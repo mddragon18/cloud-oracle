@@ -36,9 +36,12 @@ KNOWN BUGS (other modules — not fixed here):
 - Member 1: root Makefile `load` has no RUN_S (hard-coded -t 2m), handoff assumes RUN_S
 - Member 1: psutil 5.9 has no linux/arm64 wheel; on Apple Silicon build with DOCKER_DEFAULT_PLATFORM=linux/amd64 (and pull nginx:alpine for amd64)
 - Main still has stub forecast(); with raw rows it does not sum across instances (peak 429 for 3x~170 rpm). Expected to change with Member 2's merge.
-AWS STATE (account 149236595048, ap-south-1) — 2026-11-04 after full deploy:
+AWS STATE (account 149236595048, ap-south-1) — deployed 2026-11-04, suspended ~2026-11-08, recovered and redeployed 2026-11-10:
 - REPLAY_MODE (default off, also off on Lambda): age, confidence, alert window and countdown use the newest metric row; dashboard shows a replay badge. Turn on: REPLAY_MODE=1 make -C service deploy.
 - Redeployed 2026-11-05 14:2xZ from main 6712062, then replay-on: REPLAY_MODE=1 on both Lambdas; smoke.sh 7/7 PASS; pipeline 431 rows, peak 268 rpm, data age 0, confidence low; schedule DISABLED.
+- Account suspended for verification ~2026-11-08 to 2026-11-10: API down (404, then HTTP 500 on /health). Dashboard fell back to embedded mode (#26, #28). Nothing deployed meanwhile.
+- Recovered 2026-11-10: new oracle-m4 key, account 149236595048 confirmed. Old Lambda smoke 5/7: POST /plan timed out because the bucket grew to 536 objects (~2,600 rows); fixed by parallel S3 reads (#29).
+- Redeployed 2026-11-10 16:0xZ from main 95409f8 (REPLAY_MODE=1 kept): smoke.sh 7/7 PASS; pipeline 2,584 rows, 22.6 s, data through 2026-11-07T23:30Z. Model now arima (history > 2 days), MAPE 284%, confidence header "normal". Peak 379 rpm, recommended 2 x t3.micro $0.54/day, plan exhaustion_at 2026-11-24T11:25:50Z (forecast's own exhaustion_at is null). What-if 500 -> 2 x t3.micro $0.54; 5,000 -> 6 x t4g.small $2.42 (vs 10 x t3.micro $2.69), each ~19.5 s. SNS email subscription still confirmed; schedule DISABLED.
 - Deploy keeps the Lambda's REPLAY_MODE unless passed explicitly. Dashboard breaks actual lines at gaps over 5 min.
 - Module 4 in maintenance mode from 2026-11-05: changes only on request.
 - Replay switch: make -C service replay-on|replay-off (Lambda env only, keeps other vars, reruns pipeline). down.sh supports DRY_RUN=1. Demo script: service/DEMO.md.
