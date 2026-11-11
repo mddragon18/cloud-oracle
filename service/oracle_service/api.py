@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from .core import (  # noqa: F401  (re-exported for service/api/app.py and tests)
     SAMPLES,
+    forecast_accuracy,
     health,
     history,
     latest,
@@ -76,6 +77,11 @@ def api_history(days: float = Query(7, gt=0, le=30)):
 @app.get("/metrics/recent")
 def api_metrics(hours: float = Query(24, gt=0, le=168)):
     return {"rows": recent_metrics(hours)}
+
+
+@app.get("/forecast-accuracy")
+def api_forecast_accuracy(days: float = Query(7, gt=0, le=30)):
+    return forecast_accuracy(days)
 
 
 @app.get("/health")

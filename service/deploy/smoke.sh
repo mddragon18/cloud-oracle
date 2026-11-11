@@ -23,6 +23,7 @@ check GET /forecast/latest generated_at series exhaustion_at accuracy
 check GET /plan/latest generated_at options recommendation exhaustion_at
 check GET "/history?days=7" plans
 check GET "/metrics/recent?hours=24" rows
+check GET "/forecast-accuracy?days=7" rows window_hours
 BODY='{"expected_rpm": 500}' check POST /plan options peak_requests_per_min
 BODY='{"expected_rpm": 5000}' check POST /plan options peak_requests_per_min
 exit $FAIL

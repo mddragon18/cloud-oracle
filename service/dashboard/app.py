@@ -254,7 +254,7 @@ def main():
     @st.cache_data(ttl=60, show_spinner=False)
     def get(kind: str, base: str | None, arg=None, emb: bool = False):
         c = Client(base, embedded=emb)
-        return {"forecast": c.forecast, "plan": c.plan, "history": c.history, "recent": c.recent}[kind](
+        return {"forecast": c.forecast, "plan": c.plan, "history": c.history, "recent": c.recent, "accuracy": c.accuracy}[kind](
             *([] if arg is None else [arg]))
 
     base = client.base_url
@@ -345,6 +345,28 @@ def main():
         chart("cpu_pct", "CPU %", band=False, threshold=c2.get("cpu_threshold_pct", 70))
     with mem_col:
         chart("mem_pct", "memory %", band=False, threshold=MEM_LIMIT_PCT)
+
+    # real accuracy: each stored forecast against what the cluster actually did 1 h, 6 h and 24 h later
+    st.subheader("Forecast vs what actually happened")
+    try:
+        scored = get("accuracy", base, 7, embedded)
+    except ApiError as e:
+        scored = None
+        st.info(f"Forecast accuracy unavailable: {e}")
+    if scored is not None:
+        horizons = (("error_pct_1h", "1 h ahead", HUE), ("error_pct_6h", "6 h ahead", INK), ("error_pct_24h", "24 h ahead", BASELINE))
+        with st.container(border=True):
+            if not any(r[key] is not None for r in scored["rows"] for key, _, _ in horizons):
+                st.info("No forecast is old enough to score yet. Errors appear 1 h, 6 h and 24 h after each forecast.")
+            else:
+                fig = go.Figure([go.Scatter(x=[r["generated_at"] for r in scored["rows"]], y=[r[key] for r in scored["rows"]],
+                                            name=name, mode="lines+markers", connectgaps=False,
+                                            line={"color": color, "width": 2}, marker={"size": 5, "color": color})
+                                 for key, name, color in horizons])
+                style(fig, 260, "forecast error %")
+                st.plotly_chart(fig, use_container_width=True, theme=None, config={"displayModeBar": False})
+            st.caption(f"Each forecast is refit on the last {scored['window_hours']} h of data. The error is the gap between "
+                       "its prediction and the real cluster total 1 h, 6 h and 24 h after it was made.")
 
     # model accuracy: offline results from Member 2, hidden until the file exists
     accuracy = accuracy_table()

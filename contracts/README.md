@@ -51,5 +51,6 @@ Each option object includes:
 | GET | `/plan/latest` | latest C3 |
 | POST | `/plan` `{"expected_rpm": 5000}` | fresh C3 for that what-if load |
 | GET | `/history?days=7` | past plans, for the dashboard |
+| GET | `/forecast-accuracy?days=7` | `{"window_hours": 72, "rows": [{"generated_at", "model", "error_pct_1h", "error_pct_6h", "error_pct_24h"}]}` — each stored forecast against the actual cluster total 1 h, 6 h and 24 h later; `null` until the actual exists (additive, no format change) |
 | GET | `/metrics/recent?hours=24` | `{"rows": [...]}` — C1 rows aggregated per minute, for forecast-vs-actual (additive, no format change) |
 | GET | `/health` | `{"status": "ok"}` |
