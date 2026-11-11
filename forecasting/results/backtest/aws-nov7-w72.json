@@ -1,0 +1,38 @@
+{
+  "dataset": "aws-nov7",
+  "window_hours": 72.0,
+  "step_minutes": 15,
+  "warmup_hours": 6.0,
+  "origins": 34,
+  "first_origin": "2026-11-07T15:15:00Z",
+  "last_origin": "2026-11-07T23:30:00Z",
+  "models": {
+    "arima-short": 34
+  },
+  "horizons": {
+    "1h": {
+      "n": 31,
+      "mape_mean": 4.41,
+      "mape_median": 3.69,
+      "n_with_baseline": 0,
+      "mape_mean_where_baseline": null,
+      "baseline_mean": null
+    },
+    "6h": {
+      "n": 11,
+      "mape_mean": 11.42,
+      "mape_median": 8.14,
+      "n_with_baseline": 0,
+      "mape_mean_where_baseline": null,
+      "baseline_mean": null
+    },
+    "24h": {
+      "n": 0,
+      "mape_mean": null,
+      "mape_median": null,
+      "n_with_baseline": 0,
+      "mape_mean_where_baseline": null,
+      "baseline_mean": null
+    }
+  }
+}
