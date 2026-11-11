@@ -1,0 +1,38 @@
+{
+  "dataset": "azure",
+  "window_hours": 48.0,
+  "step_minutes": 60,
+  "warmup_hours": 168.0,
+  "origins": 168,
+  "first_origin": "2026-10-08T00:00:00Z",
+  "last_origin": "2026-10-14T23:00:00Z",
+  "models": {
+    "arima-short": 168
+  },
+  "horizons": {
+    "1h": {
+      "n": 168,
+      "mape_mean": 0.91,
+      "mape_median": 0.79,
+      "n_with_baseline": 168,
+      "mape_mean_where_baseline": 0.91,
+      "baseline_mean": 1.01
+    },
+    "6h": {
+      "n": 163,
+      "mape_mean": 1.07,
+      "mape_median": 0.98,
+      "n_with_baseline": 163,
+      "mape_mean_where_baseline": 1.07,
+      "baseline_mean": 1.0
+    },
+    "24h": {
+      "n": 145,
+      "mape_mean": 1.16,
+      "mape_median": 1.12,
+      "n_with_baseline": 145,
+      "mape_mean_where_baseline": 1.16,
+      "baseline_mean": 1.01
+    }
+  }
+}

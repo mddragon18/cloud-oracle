@@ -1,8 +1,10 @@
 """Module 2: forecast(metrics) -> C2 dict (contracts/README.md).
 
-Only the latest unbroken stretch of metrics is used (a gap over GAP_MINUTES starts
-a new one), with the cluster total scaled up for servers that stopped reporting.
-On that stretch:
+Only a sliding window of recent metrics is used: the last FORECAST_WINDOW_HOURS
+(env, default 72) back from the newest row, and within it the latest unbroken
+stretch (a gap over GAP_MINUTES starts a new one), with the cluster total scaled up
+for servers that stopped reporting. Keep the window above 48 h: the daily model
+needs 2 days, so a 48 h window never reaches it. On that stretch:
 - >= 2 days: ARIMA with daily Fourier terms on 15-minute load (1 day to train +
   1 held-out day for accuracy).
 - >= 6 h: "arima-short", ARIMA with no daily cycle and no trend (both need more
@@ -24,6 +26,12 @@ SHORT_HOLDOUT_MINUTES = 3 * 60
 GAP_MINUTES = 15  # a longer gap ends a stretch; shorter ones are interpolated
 NAIVE_WINDOW_MINUTES = 30  # short-history fallback averages the last 30 minutes
 FOURIER_K = 3  # harmonics of the daily cycle; 3 fits a day/night shape without overfitting
+DEFAULT_WINDOW_HOURS = 72  # 2 days to train the daily model + 1 held-out day
+
+
+def window_hours():
+    """The sliding window, shared with service/ through the FORECAST_WINDOW_HOURS env var."""
+    return float(os.environ.get("FORECAST_WINDOW_HOURS", DEFAULT_WINDOW_HOURS))
 
 
 def load_metrics(path):
@@ -64,8 +72,9 @@ def _per_minute(rows):
     return [p[:4] for p in _per_minute_n(rows)]
 
 
-def latest_stretch(rows):
+def latest_stretch(rows, window_hours=None):
     """Per-minute points of the newest unbroken stretch, with missing servers' traffic filled in.
+    With `window_hours`, minutes older than that before the newest one are dropped first.
 
     When fewer servers report than the most seen in the stretch, two things can have happened:
     - the rest still served their share but stopped reporting (Nov 7: i-01 went quiet at 16:07,
@@ -76,6 +85,9 @@ def latest_stretch(rows):
     """
     import statistics
     points = _per_minute_n(rows)
+    if window_hours and points:
+        cut = points[-1][0] - timedelta(hours=window_hours)
+        points = [p for p in points if p[0] > cut]
     start = 0
     for i in range(1, len(points)):
         if (points[i][0] - points[i - 1][0]).total_seconds() > GAP_MINUTES * 60:
@@ -98,20 +110,20 @@ def latest_stretch(rows):
     return out
 
 
-def forecast(metrics, horizon_minutes=1440, step_minutes=15, cpu_threshold_pct=70.0):
-    """metrics: list of C1 row dicts or a C1 DataFrame -> C2 dict."""
+def forecast(metrics, horizon_minutes=1440, step_minutes=15, cpu_threshold_pct=70.0, window=None):
+    """metrics: list of C1 row dicts or a C1 DataFrame -> C2 dict.
+    window: hours of history to use (default: window_hours(), from FORECAST_WINDOW_HOURS)."""
     if hasattr(metrics, "to_dict"):
         metrics = metrics.to_dict("records")
-    points = latest_stretch(metrics)
+    window = window or window_hours()
+    points = latest_stretch(metrics, window)
     if len(points) < 2:
         raise ValueError("need at least 2 C1 timestamps in the latest stretch")
     span = (points[-1][0] - points[0][0]).total_seconds() / 60
-    if span >= MIN_HISTORY_MINUTES:
-        series, accuracy, model = _arima(points, horizon_minutes, step_minutes)
-    elif span >= MIN_SHORT_MINUTES:
-        series, accuracy, model = _arima(points, horizon_minutes, step_minutes, daily=False)
-    else:
-        series, accuracy, model = _naive(points, horizon_minutes, step_minutes)
+    fitted = None
+    if span >= MIN_SHORT_MINUTES:
+        fitted = _arima(points, horizon_minutes, step_minutes, daily=span >= MIN_HISTORY_MINUTES)
+    series, accuracy, model = fitted or _naive(points, horizon_minutes, step_minutes)
 
     exhaustion_at = next((s["timestamp"] for s in series if s["cpu_pct"] >= cpu_threshold_pct), None)
     return {
@@ -123,6 +135,7 @@ def forecast(metrics, horizon_minutes=1440, step_minutes=15, cpu_threshold_pct=7
         "series": series,
         "cpu_threshold_pct": cpu_threshold_pct,
         "exhaustion_at": exhaustion_at,
+        "window_hours": window,
     }
 
 
@@ -214,6 +227,12 @@ def _arima(points, horizon_minutes, step_minutes, daily=True):
     df = _frame(points, step_minutes)
     period = 1440 // step_minutes
     mean, lower, upper = _fit_predict(df["rpm"].to_numpy(), horizon_minutes // step_minutes, period, daily)
+    # A fit can diverge numerically: on Azure history of 671-728 rpm one forecast 1.1 million rpm
+    # while its own holdout said 1.1% error. Past 3x the busiest load seen, fall back to naive.
+    # shortcut: 3x would also reject a real 3x surge inside 24 h; raise it if that's ever expected.
+    if not (np.isfinite(mean).all() and np.isfinite(upper).all()
+            and max(mean.max(), upper.max()) <= 3 * df["rpm"].max()):
+        return None
     # CPU/mem follow load: least-squares line learned from history
     cpu_a, cpu_b = np.polyfit(df["rpm"], df["cpu"], 1)
     mem_a, mem_b = np.polyfit(df["rpm"], df["mem"], 1)
