@@ -6,7 +6,7 @@ from . import config, engine
 from .alerts import STALE_MIN, low_confidence
 from .config import REPO
 from .schemas import validate
-from .sources import get_source, parse_ts
+from .sources import NoMetricsError, get_source, parse_ts
 from .store import get_store, iso
 
 SAMPLES = {"forecast": REPO / "contracts" / "C2-forecast.sample.json",
@@ -66,6 +66,33 @@ def recent_metrics(hours: float = 24) -> list[dict]:
     """C1 rows aggregated per minute over the last `hours` of data."""
     cfg = config.load()
     return engine.aggregate(get_source(cfg).get_rows(hours), "per_minute_total")
+
+
+HORIZONS_H = (1, 6, 24)
+
+
+def forecast_accuracy(days: float = 7) -> dict:
+    """How stored forecasts turned out. For each forecast in the last `days`: its requests_per_min at
+    generated_at + 1 h, 6 h and 24 h against the actual cluster total at that minute (same per-minute
+    aggregation as recent_metrics). Error is absolute %, None while the actual isn't in the metrics yet."""
+    cfg = config.load()
+    try:
+        rows = engine.aggregate(get_source(cfg).get_rows(days * 24 + max(HORIZONS_H)), "per_minute_total")
+    except NoMetricsError:
+        rows = []
+    actual = {parse_ts(r["timestamp"]): r["requests_per_min"] for r in rows}
+    out = []
+    for c2 in reversed(get_store(cfg).since("forecast", days)):  # oldest first
+        generated, step = parse_ts(c2["generated_at"]), timedelta(minutes=c2["step_minutes"])
+        points = [(parse_ts(p["timestamp"]), p["requests_per_min"]) for p in c2["series"]]
+        row = {"generated_at": c2["generated_at"], "model": c2.get("model")}
+        for h in HORIZONS_H:
+            target = generated + timedelta(hours=h)
+            ts, predicted = min(points, key=lambda p: abs(p[0] - target), default=(None, None))
+            seen = actual.get(ts) if ts is not None and abs(ts - target) <= step else None
+            row[f"error_pct_{h}h"] = round(abs(predicted - seen) / seen * 100, 2) if seen else None
+        out.append(row)
+    return {"window_hours": cfg.forecast_window_hours, "rows": out}
 
 
 def health() -> dict:

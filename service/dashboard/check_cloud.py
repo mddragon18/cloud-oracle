@@ -24,7 +24,7 @@ assert "Cloud backend offline: running the same code on recorded AWS data" in md
 assert "Replay of recorded run (2026-11-05)" in md and "Recorded run" in md
 assert any("Low confidence" in w.value for w in at.warning), "short recorded run must show the low-confidence banner"
 sub = " ".join(s.value for s in at.subheader)
-for panel in ("Forecast vs actual", "Model accuracy (offline evaluation)", "Options for peak", "What-if", "History (7 days)"):
+for panel in ("Forecast vs actual", "Forecast vs what actually happened", "Model accuracy (offline evaluation)", "Options for peak", "What-if", "History (7 days)"):
     assert panel in sub, f"missing panel {panel!r}"
 assert "<h1>Scale " in md and "Recommended" in md and "Options for peak 268 req/min" in sub
 assert len(at.get("plotly_chart")) >= 3, "expected rpm, CPU and memory charts"

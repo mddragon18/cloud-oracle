@@ -7,7 +7,7 @@ Setup for every terminal step: `source .venv/bin/activate`, `export AWS_PROFILE=
 
 ## Before you present
 1. Check the mode. With replay on, the dashboard shows the "Replay of recorded run (2026-11-05)" badge.
-2. `make -C service smoke`: expect 7 PASS lines.
+2. `make -C service smoke`: expect 8 PASS lines.
 3. Keep the dashboard open. Streamlit Cloud sleeps when idle, so load it a few minutes early.
 
 `make -C service deploy` keeps the current replay setting. To change it, use `make -C service replay-on` or `replay-off`, or pass `REPLAY_MODE=0` or `1` to the deploy.

@@ -168,6 +168,12 @@ class Client:
             return self._http("GET", "/history", params={"days": days})[0]["plans"]
         return self._offline(lambda a: a.history, days)
 
+    def accuracy(self, days: int = 7) -> dict:
+        """-> {"window_hours": int, "rows": [{generated_at, model, error_pct_1h, error_pct_6h, error_pct_24h}]}."""
+        if self.base_url:
+            return self._http("GET", "/forecast-accuracy", params={"days": days})[0]
+        return self._offline(lambda a: a.forecast_accuracy, days)
+
     def recent(self, hours: int = 24) -> list[dict]:
         if self.base_url:
             return self._http("GET", "/metrics/recent", params={"hours": hours})[0]["rows"]
