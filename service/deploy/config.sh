@@ -28,14 +28,15 @@ check_account() {
   local acct; acct=$(aws sts get-caller-identity --query Account --output text)
   [ "$acct" = "$ACCOUNT_ID" ] || { echo "wrong AWS account: $acct (expected $ACCOUNT_ID)" >&2; exit 1; }
 }
-current_replay() {  # the deployed REPLAY_MODE; 0 only if the Lambda or the variable doesn't exist yet
+current_env() {  # name default: the deployed value of a Lambda env var; default only if the Lambda or var doesn't exist yet
   local v
   v=$(aws lambda get-function-configuration --function-name "$PIPELINE_FN" \
-    --query Environment.Variables.REPLAY_MODE --output text 2>&1) || case "$v" in
-      *ResourceNotFound*) v=0 ;;
-      *) echo "cannot read REPLAY_MODE: $v" >&2; return 1 ;;
+    --query "Environment.Variables.$1" --output text 2>&1) || case "$v" in
+      *ResourceNotFound*) v=$2 ;;
+      *) echo "cannot read $1: $v" >&2; return 1 ;;
     esac
-  [ "$v" = None ] && v=0
+  [ "$v" = None ] && v=$2
   echo "$v"
 }
+current_replay() { current_env REPLAY_MODE 0; }
 log() { printf '\n== %s\n' "$*"; }

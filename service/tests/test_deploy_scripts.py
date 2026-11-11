@@ -77,3 +77,31 @@ def test_deploy_stops_if_replay_unreadable(tmp_path):
 def test_lambdas_run_math_libraries_single_threaded():
     env_line = next(l for l in (REPO / "service/deploy/up.sh").read_text().splitlines() if l.startswith('ENV_VARS="Variables='))
     assert all(f"{v}=1" in env_line for v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"))
+
+
+def window_for_deploy(tmp_path, reply, explicit=""):
+    aws = tmp_path / "aws"
+    aws.write_text(f"#!/bin/bash\n{reply}\n")
+    aws.chmod(aws.stat().st_mode | stat.S_IEXEC)
+    lines = (REPO / "service/deploy/up.sh").read_text().splitlines()
+    block = "\n".join(l for l in lines if "FORECAST_WINDOW_HOURS" in l and not l.startswith(("#", "ENV_VARS")))
+    return subprocess.run(["bash", "-c", f"set -euo pipefail; source service/deploy/config.sh\n{block}"], cwd=REPO,
+                          capture_output=True, text=True,
+                          env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}", "FORECAST_WINDOW_HOURS": explicit})
+
+
+def test_deploy_passes_forecast_window_to_lambdas(tmp_path):
+    up = (REPO / "service/deploy/up.sh").read_text()
+    assert "FORECAST_WINDOW_HOURS=$FORECAST_WINDOW_HOURS," in next(l for l in up.splitlines() if l.startswith("ENV_VARS="))
+    assert "72" not in up  # the default lives in service config only
+    assert "FORECAST_WINDOW_HOURS=72" in window_for_deploy(tmp_path, "echo None").stdout  # nothing deployed -> default
+    assert "FORECAST_WINDOW_HOURS=48" in window_for_deploy(tmp_path, "echo 48").stdout  # keeps the deployed value
+    assert "FORECAST_WINDOW_HOURS=24" in window_for_deploy(tmp_path, "echo 48", explicit="24").stdout
+
+
+def test_forecast_window_default_and_env(monkeypatch):
+    from service.oracle_service import config
+    monkeypatch.delenv("FORECAST_WINDOW_HOURS", raising=False)
+    assert config.load().forecast_window_hours == 72
+    monkeypatch.setenv("FORECAST_WINDOW_HOURS", "48")
+    assert config.load().forecast_window_hours == 48

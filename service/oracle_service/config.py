@@ -28,6 +28,7 @@ class Config:
     alert_topic_arn: str
     alert_window_min: int
     lookback_hours: int
+    forecast_window_hours: int
     aggregate_mode: str
     aws_region: str
     dashboard_url: str
@@ -49,6 +50,8 @@ def load() -> Config:
         alert_topic_arn=e("ALERT_TOPIC_ARN", ""),
         alert_window_min=int(e("ALERT_WINDOW_MIN", "60")),
         lookback_hours=int(e("LOOKBACK_HOURS", "168")),
+        # Sliding window shared with forecasting/ (Member 2 reads the same variable). The only place the default lives.
+        forecast_window_hours=int(e("FORECAST_WINDOW_HOURS") or 72),
         aggregate_mode=e("AGGREGATE_MODE", "raw"),
         aws_region=e("AWS_REGION", "ap-south-1"),
         dashboard_url=e("DASHBOARD_URL", ""),
