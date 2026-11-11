@@ -72,3 +72,51 @@ def test_s3_parallel_read_keeps_newest_file_winning():
     rows = S3Source("oracle-metrics", "ap-south-1", client=s3).get_rows(168)
     assert next(r for r in rows if r["instance_id"] == "i-1")["requests_per_min"] == 60  # last key wins
     assert len(rows) == 61
+
+
+def bucket_with(files):
+    s3 = boto3.client("s3", region_name="ap-south-1")
+    s3.create_bucket(Bucket="oracle-metrics", CreateBucketConfiguration={"LocationConstraint": "ap-south-1"})
+    for key, ts in files:
+        s3.put_object(Bucket="oracle-metrics", Key=key, Body="\n".join([HDR, line(ts, "i-1")]))
+    return s3
+
+
+def kept_timestamps(s3, window_hours, caplog):
+    caplog.clear()
+    rows = S3Source("oracle-metrics", "ap-south-1", client=s3, window_hours=window_hours).get_rows(10_000)
+    return [r["timestamp"] for r in rows], caplog.text
+
+
+@mock_aws
+def test_s3_reads_only_files_inside_the_window_measured_from_newest_file(caplog):
+    # Replay case: every file is years older than the wall clock; the window still hangs off the newest file.
+    # Newest file 2020-01-05T00:00Z, window 72 h + 1 h -> cutoff 2020-01-01T23:00:00Z, strictly newer is kept.
+    s3 = bucket_with([("metrics/i-1/metrics-20200101T000000Z.csv", "2020-01-01T00:00:00Z"),   # 96 h old: skipped
+                      ("metrics/i-1/metrics-20200101T230000Z.csv", "2020-01-01T23:00:00Z"),   # exactly on the cutoff: skipped
+                      ("metrics/i-1/metrics-20200101T230001Z.csv", "2020-01-01T23:00:01Z"),   # 1 s inside: kept
+                      ("metrics/i-1/metrics-20200103T000000Z.csv", "2020-01-03T00:00:00Z"),
+                      ("metrics/i-1/metrics-20200105T000000Z.csv", "2020-01-05T00:00:00Z")])  # newest
+    ts, logs = kept_timestamps(s3, 72, caplog)
+    assert ts == ["2020-01-01T23:00:01Z", "2020-01-03T00:00:00Z", "2020-01-05T00:00:00Z"]
+    assert '"kept": 3, "skipped": 2' in logs
+    assert len(kept_timestamps(s3, None, caplog)[0]) == 5  # no window: everything
+
+
+@mock_aws
+def test_s3_unparsable_key_falls_back_to_last_modified(caplog):
+    # moto stamps LastModified with the real clock, far newer than the 2020 keys
+    s3 = bucket_with([("metrics/i-1/metrics-20200101T000000Z.csv", "2020-01-01T00:00:00Z"),
+                      ("metrics/i-1/export.csv", "2020-01-01T00:01:00Z"),
+                      ("metrics/i-1/metrics-99999999T999999Z.csv", "2020-01-01T00:02:00Z")])
+    ts, logs = kept_timestamps(s3, 72, caplog)
+    assert ts == ["2020-01-01T00:01:00Z", "2020-01-01T00:02:00Z"] and '"kept": 2, "skipped": 1' in logs
+
+
+def test_get_source_passes_the_forecast_window(monkeypatch):
+    from service.oracle_service import config
+    from service.oracle_service.sources import get_source
+    monkeypatch.setenv("ORACLE_SOURCE", "s3")
+    monkeypatch.setenv("METRICS_BUCKET", "b")
+    monkeypatch.setenv("FORECAST_WINDOW_HOURS", "48")
+    assert get_source(config.load()).window_hours == 48
