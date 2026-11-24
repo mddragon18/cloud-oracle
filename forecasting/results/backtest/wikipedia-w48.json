@@ -1,0 +1,38 @@
+{
+  "dataset": "wikipedia",
+  "window_hours": 48.0,
+  "step_minutes": 60,
+  "warmup_hours": 168.0,
+  "origins": 168,
+  "first_origin": "2026-10-08T00:00:00Z",
+  "last_origin": "2026-10-14T23:00:00Z",
+  "models": {
+    "arima-short": 168
+  },
+  "horizons": {
+    "1h": {
+      "n": 168,
+      "mape_mean": 1.27,
+      "mape_median": 0.99,
+      "n_with_baseline": 168,
+      "mape_mean_where_baseline": 1.27,
+      "baseline_mean": 3.07
+    },
+    "6h": {
+      "n": 163,
+      "mape_mean": 7.91,
+      "mape_median": 6.21,
+      "n_with_baseline": 163,
+      "mape_mean_where_baseline": 7.91,
+      "baseline_mean": 3.0
+    },
+    "24h": {
+      "n": 145,
+      "mape_mean": 13.16,
+      "mape_median": 13.46,
+      "n_with_baseline": 145,
+      "mape_mean_where_baseline": 13.16,
+      "baseline_mean": 2.99
+    }
+  }
+}

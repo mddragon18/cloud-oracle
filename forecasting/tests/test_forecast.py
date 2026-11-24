@@ -96,6 +96,52 @@ def test_latest_stretch_with_lost_server():
     assert 1350 < pts[-1][1] < 1650, pts[-1][1]  # ~3 x 500, not 9 x 500
 
 
+def test_sliding_window():
+    """forecast() uses only the last `window` hours, and picks the model by what is left."""
+    from forecasting.forecast import latest_stretch
+    from forecasting.synthetic import generate
+    week = generate("cycle", days=7)
+    pts = latest_stretch(week.to_dict("records"), window_hours=72)
+    assert (pts[-1][0] - pts[0][0]).total_seconds() / 3600 < 72 <= len(pts) / 60 + 0.1  # old rows trimmed
+
+    r = forecast(week, window=72)
+    assert r["model"] == "arima" and r["window_hours"] == 72 and r["accuracy"]["holdout_minutes"] == 1440
+    assert forecast(week, window=48)["model"] == "arima-short"  # 48 h can never reach the 2-day model
+    assert forecast(week, window=7)["model"] == "arima-short"
+    assert forecast(week, window=5)["model"] == "naive"
+
+    # a gap inside the window: only the stretch after it counts (8 h -> arima-short, not 3-day arima)
+    gappy = week[(week["timestamp"] < "2026-10-07T00:00:00Z") | (week["timestamp"] >= "2026-10-07T16:00:00Z")]
+    assert forecast(gappy, window=72)["model"] == "arima-short"
+
+
+def test_diverged_fit_falls_back():
+    """Regression: an ARIMA fit on Azure (671-728 rpm) once forecast 1.1 million rpm."""
+    import numpy as np
+    import forecasting.forecast as f
+    from forecasting.synthetic import generate
+    real = f._fit_predict
+    f._fit_predict = lambda y, steps, period, daily=True: (np.full(steps, 1.1e6), np.zeros(steps), np.zeros(steps))
+    try:
+        r = forecast(generate("steady", days=3))
+    finally:
+        f._fit_predict = real
+    assert r["model"] == "naive" and max(s["requests_per_min"] for s in r["series"]) < 1000, r["model"]
+
+
+def test_backtest():
+    """Walk-forward: each origin only sees the past; horizons beyond the data stay empty."""
+    from forecasting.backtest import run, summarize
+    from forecasting.synthetic import generate
+    res = run(generate("steady", days=1).head(9 * 60), window=72, step_minutes=60, warmup_hours=6)
+    assert list(res["origin"]) == ["2026-10-01T06:00:00Z", "2026-10-01T07:00:00Z", "2026-10-01T08:00:00Z"]
+    assert list(res["model"]) == ["naive", "arima-short", "arima-short"]  # 06:00 sees 5 h 59 min
+    assert res["mape_1h"].notna().all() and res["mape_1h"].max() < 10, res["mape_1h"]
+    assert res["mape_6h"].isna().all() and res["baseline_1h"].isna().all()  # no future 6 h, no yesterday
+    s = summarize(res, "t", 72, 60, 6)
+    assert s["horizons"]["1h"]["n"] == 3 and s["horizons"]["24h"]["n"] == 0
+
+
 def test_loaders():
     import pandas as pd
     from forecasting.loaders import azure_functions, wikipedia
